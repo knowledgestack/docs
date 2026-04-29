@@ -1,0 +1,323 @@
+---
+title: "Path Parts"
+description: "Navigate the hierarchical tree of folders and documents, and apply tags at any level."
+---
+
+Path parts are the nodes in Knowledge Stack's content hierarchy. Every folder, document, document version, section, and chunk has a corresponding path part with a unique ID and a materialized path string that reflects its position in the tree.
+
+You work with path parts when you need to:
+- Traverse or display the folder/document tree
+- Retrieve the full ancestry (breadcrumb) of any node
+- Fetch all chunks under a subtree for indexing or bulk operations
+- Apply or read tags at a folder or document level
+
+<Note>
+  The `GET /v1/path-parts` endpoint returns **FOLDER** type path parts only. To list folder contents including documents with enriched metadata, use `GET /v1/folders/{folder_id}/contents` instead.
+</Note>
+
+---
+
+## GET /v1/path-parts
+
+List path parts (folders) in the hierarchy, optionally filtered by parent and traversal depth.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `parent_path_id` | string (UUID) | — | List children of this path part. Omit to start from the root. |
+| `max_depth` | integer | `1` | How many levels deep to traverse. `1` returns direct children only. |
+| `sort_order` | string | `LOGICAL` | Ordering strategy. See [PathOrder](#pathorder). |
+| `limit` | integer | `20` | Items per page (1–100). |
+| `offset` | integer | `0` | Items to skip. |
+
+Returns a paginated list of `PathPartResponse` objects.
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/path-parts?parent_path_id=2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6&max_depth=2&sort_order=NAME" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## GET /v1/path-parts/{path_part_id}
+
+Get a single path part by ID. The response includes any tags directly attached to this path part.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}
+```
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6 \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## GET /v1/path-parts/{path_part_id}/ancestry
+
+Get the full ancestry chain from the root down to (and including) the target path part. Use this to build breadcrumb navigation.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/ancestry
+```
+
+Authorization is checked on the leaf path part. If you can read the leaf, you can navigate all of its ancestors.
+
+Returns an `AncestryResponse` with an `ancestors` array ordered root-to-leaf.
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/ancestry \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "ancestors": [
+    {
+      "path_part_id": "00000000-0000-0000-0000-000000000001",
+      "name": "shared",
+      "part_type": "FOLDER",
+      "parent_path_id": null,
+      "metadata_obj_id": null,
+      "materialized_path": "/shared",
+      "system_managed": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "updated_at": "2025-01-01T00:00:00Z"
+    },
+    {
+      "path_part_id": "1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6",
+      "name": "policies",
+      "part_type": "FOLDER",
+      "parent_path_id": "00000000-0000-0000-0000-000000000001",
+      "metadata_obj_id": "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+      "materialized_path": "/shared/policies",
+      "system_managed": false,
+      "created_at": "2025-02-01T09:00:00Z",
+      "updated_at": "2025-03-15T14:30:00Z"
+    },
+    {
+      "path_part_id": "2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6",
+      "name": "refunds",
+      "part_type": "FOLDER",
+      "parent_path_id": "1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6",
+      "metadata_obj_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "materialized_path": "/shared/policies/refunds",
+      "system_managed": false,
+      "created_at": "2025-02-10T10:00:00Z",
+      "updated_at": "2025-03-20T11:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## GET /v1/path-parts/{path_part_id}/subtree_chunks
+
+Retrieve all descendant chunks under a path part. Chunks are returned grouped by their shared `path_part_ids` and `tag_ids` — useful for batching downstream operations such as vector store updates.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/subtree_chunks
+```
+
+Returns a `SubtreeChunksResponse`.
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/subtree_chunks \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "groups": [
+    {
+      "chunk_ids": [
+        "7f3a1b9c-4e2d-4a8f-b6c1-d9e0f1234567",
+        "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e"
+      ],
+      "path_part_ids": ["2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6"],
+      "tag_ids": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+    },
+    {
+      "chunk_ids": ["9c0d1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f"],
+      "path_part_ids": ["2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6"],
+      "tag_ids": []
+    }
+  ]
+}
+```
+
+---
+
+## GET /v1/path-parts/{path_part_id}/tags
+
+Get tags associated with a path part.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/tags
+```
+
+**Query parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `include_inherited` | boolean | `false` | When `true`, walks the ancestor chain and returns a deduplicated union of all tags from all ancestors (including this path part). When `false`, returns only directly-attached tags. |
+
+```bash
+# Get directly-attached tags only
+curl https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/tags \
+  -H "Authorization: Bearer <your-api-key>"
+
+# Get all tags including inherited from parent folders
+curl "https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/tags?include_inherited=true" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+Returns a `PathPartTagsResponse`:
+
+```json
+{
+  "tags": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Legal",
+      "color": "E74C3C",
+      "description": "Legal and compliance documents",
+      "tenant_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "created_at": "2025-04-01T10:00:00Z",
+      "updated_at": "2025-04-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+## POST /v1/path-parts/{path_part_id}/tags
+
+Bulk add tags to a path part. Idempotent — tags already applied are silently skipped. Returns `400` if any `tag_id` does not exist. Requires write permission on the path part.
+
+```
+POST https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/tags
+```
+
+<ParamField body="tag_ids" type="array" required>
+  Array of tag UUIDs to apply. Maximum 10 per request.
+</ParamField>
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/tags \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"tag_ids": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]}'
+```
+
+---
+
+## DELETE /v1/path-parts/{path_part_id}/tags
+
+Bulk remove tags from a path part. Tags not currently applied are silently skipped.
+
+```
+DELETE https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/tags
+```
+
+<ParamField body="tag_ids" type="array" required>
+  Array of tag UUIDs to remove. Maximum 10 per request.
+</ParamField>
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/tags \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"tag_ids": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]}'
+```
+
+---
+
+## PathPartResponse
+
+<ResponseField name="path_part_id" type="string">
+  UUID of this path part.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name of this item (folder name, document name, chunk sequence number, etc.).
+</ResponseField>
+
+<ResponseField name="part_type" type="string">
+  The type of item this path part represents. See [PartType](#parttype).
+</ResponseField>
+
+<ResponseField name="parent_path_id" type="string | null">
+  UUID of the parent path part, or `null` for the root.
+</ResponseField>
+
+<ResponseField name="metadata_obj_id" type="string | null">
+  UUID of the underlying domain object (e.g. the `folder_id`, `document_id`).
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string">
+  Full slash-delimited path from root to this node (e.g. `/shared/policies/refunds`).
+</ResponseField>
+
+<ResponseField name="system_managed" type="boolean">
+  `true` for path parts created and managed by the platform (e.g. root folders).
+</ResponseField>
+
+<ResponseField name="tags" type="array | null">
+  Tags directly attached to this path part, if resolved in the response.
+</ResponseField>
+
+<ResponseField name="can_read" type="boolean">
+  Whether the authenticated user has read access to this path part.
+</ResponseField>
+
+<ResponseField name="can_write" type="boolean">
+  Whether the authenticated user has write access to this path part.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+---
+
+## PartType
+
+Every node in the hierarchy has a `part_type` identifying what it represents.
+
+| Value | Description |
+|---|---|
+| `FOLDER` | A folder that can contain documents and other folders. |
+| `DOCUMENT` | A document node. |
+| `DOCUMENT_VERSION` | A specific version of a document. |
+| `SECTION` | A section grouping within a document version. |
+| `CHUNK` | A single content chunk (the leaf of the hierarchy). |
+| `THREAD` | An AI conversation thread. |
+| `THREAD_MESSAGE` | A single message within a thread. |
+| `WORKFLOW_DEFINITION` | A saved workflow definition. |
+| `WORKFLOW_RUN` | A single workflow execution. |
+
+---
+
+## PathOrder
+
+Controls the ordering of results from `GET /v1/path-parts`.
+
+| Value | Description |
+|---|---|
+| `LOGICAL` | **Default.** Ordered using the `prev_sibling_path_part_id` / `next_sibling_path_part_id` linked list, preserving the user-defined drag-and-drop order within each depth level. |
+| `NAME` | Alphabetical order by `path_part.name`. |
+| `UPDATED_AT` | Most recently updated first. |
+| `CREATED_AT` | Oldest created first. |

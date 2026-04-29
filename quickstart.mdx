@@ -1,0 +1,208 @@
+---
+title: "Quick Start"
+description: "Get up and running with Knowledge Stack in minutes — ingest a document, search it, and ask an AI question."
+---
+
+This guide walks you through the four core actions of the Knowledge Stack API: getting a key, ingesting a document, searching it, and starting an AI conversation.
+
+**Prerequisites:** You need an existing Knowledge Stack account and at least one tenant. If you don't have one yet, reach out to your account administrator.
+
+<Steps>
+  <Step title="Get an API key">
+    Create an API key to authenticate your requests. You'll need an existing token (from signing in) to create your first key — use `POST /v1/auth/pw/signin` to get one.
+
+    Once you have a token, create a key:
+
+    ```bash
+    curl -X POST https://api-staging.knowledgestack.ai/v1/api-keys \
+      -H "Authorization: Bearer <your-token>" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "quickstart-key"}'
+    ```
+
+    **Response:**
+
+    ```json
+    {
+      "id": "key_01j9abc123",
+      "name": "quickstart-key",
+      "key": "ks_live_abcdef1234567890",
+      "created_at": "2025-01-15T10:00:00Z"
+    }
+    ```
+
+    Copy the `key` value — it's only shown once. Use it as `<API_KEY>` in the steps below.
+
+    <Warning>
+    Store your API key securely. Anyone with the key can make API calls on your behalf.
+    </Warning>
+  </Step>
+
+  <Step title="Ingest a document">
+    Upload a document for Knowledge Stack to process. The ingest endpoint accepts a file upload and optional metadata. Knowledge Stack chunks and indexes the document automatically.
+
+    ```bash
+    curl -X POST https://api-staging.knowledgestack.ai/v1/documents/ingest \
+      -H "Authorization: Bearer <API_KEY>" \
+      -F "file=@/path/to/your/document.pdf" \
+      -F 'metadata={"title":"Getting Started Guide","folder_path":"/quickstart"}'
+    ```
+
+    **Response:**
+
+    ```json
+    {
+      "document_id": "doc_01j9xyz789",
+      "version_id": "ver_01j9xyz790",
+      "status": "processing",
+      "workflow_id": "wf_01j9xyz791"
+    }
+    ```
+
+    The document is processed asynchronously. The `workflow_id` lets you track progress.
+
+    <Note>
+    Processing typically completes within seconds for small documents. You can poll `GET /v1/workflows/{workflow_id}` to check when the status changes to `completed`.
+    </Note>
+
+    Check the workflow status:
+
+    ```bash
+    curl https://api-staging.knowledgestack.ai/v1/workflows/wf_01j9xyz791 \
+      -H "Authorization: Bearer <API_KEY>"
+    ```
+
+    ```json
+    {
+      "workflow_id": "wf_01j9xyz791",
+      "status": "completed",
+      "completed_at": "2025-01-15T10:00:05Z"
+    }
+    ```
+
+    Once the status is `completed`, the document's chunks are ready to search.
+  </Step>
+
+  <Step title="Search your knowledge base">
+    Run a semantic search against your ingested documents. Knowledge Stack ranks chunks by relevance to your query.
+
+    ```bash
+    curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+      -H "Authorization: Bearer <API_KEY>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "query": "How do I get started?",
+        "limit": 5
+      }'
+    ```
+
+    **Response:**
+
+    ```json
+    {
+      "results": [
+        {
+          "chunk_id": "chk_01j9aaa111",
+          "score": 0.94,
+          "content": "To get started, first create an API key from your dashboard...",
+          "document_id": "doc_01j9xyz789",
+          "document_title": "Getting Started Guide"
+        },
+        {
+          "chunk_id": "chk_01j9aaa112",
+          "score": 0.87,
+          "content": "Once you have your key, you can begin ingesting documents...",
+          "document_id": "doc_01j9xyz789",
+          "document_title": "Getting Started Guide"
+        }
+      ],
+      "total": 2
+    }
+    ```
+
+    Each result includes a relevance `score` between 0 and 1, the chunk text, and the source document. Higher scores indicate stronger semantic matches.
+
+    <Tip>
+    Use the `parent_path_ids` field to scope search to a specific folder. This is useful when you have documents from different teams or topics.
+    </Tip>
+  </Step>
+
+  <Step title="Create a thread and ask a question">
+    Threads let you have a multi-turn AI conversation grounded in your documents. Create a thread, send a user message, and Knowledge Stack retrieves relevant chunks and generates a response.
+
+    **Create a thread:**
+
+    ```bash
+    curl -X POST https://api-staging.knowledgestack.ai/v1/threads \
+      -H "Authorization: Bearer <API_KEY>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "title": "My first conversation"
+      }'
+    ```
+
+    ```json
+    {
+      "id": "thr_01j9bbb222",
+      "title": "My first conversation",
+      "created_at": "2025-01-15T10:01:00Z"
+    }
+    ```
+
+    **Send a message:**
+
+    ```bash
+    curl -X POST https://api-staging.knowledgestack.ai/v1/threads/thr_01j9bbb222/user_message \
+      -H "Authorization: Bearer <API_KEY>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "input_text": "What does the getting started guide cover?"
+      }'
+    ```
+
+    ```json
+    {
+      "workflow_id": "thread-agent:01929abc-..."
+    }
+    ```
+
+    **Stream the AI response:**
+
+    ```bash
+    curl https://api-staging.knowledgestack.ai/v1/threads/thr_01j9bbb222/stream \
+      -H "Authorization: Bearer <API_KEY>"
+    ```
+
+    The response streams as server-sent events. Each event contains a chunk of the AI's reply along with citations pointing back to the source documents.
+
+    ```
+    data: {"delta": "The getting started guide covers ", "citations": []}
+    data: {"delta": "API key creation, document ingestion, ", "citations": [{"chunk_id": "chk_01j9aaa111"}]}
+    data: {"delta": "semantic search, and AI threads.", "citations": []}
+    data: [DONE]
+    ```
+
+    <Note>
+    Threads maintain conversation history. You can call `POST .../user_message` again to continue the conversation with follow-up questions.
+    </Note>
+  </Step>
+</Steps>
+
+## What's next
+
+You've completed the core Knowledge Stack workflow. From here, you can:
+
+<CardGroup cols={2}>
+  <Card title="Organize with folders" icon="folder" href="/guides/ingest-documents">
+    Structure your knowledge base with folders and path-based organization.
+  </Card>
+  <Card title="Set up permissions" icon="lock" href="/concepts/permissions">
+    Control which users and groups can access which documents.
+  </Card>
+  <Card title="Build workflows" icon="gears" href="/guides/workflows">
+    Automate ingestion pipelines with custom workflow definitions.
+  </Card>
+  <Card title="API reference" icon="code" href="/api-reference/auth/overview">
+    Full reference for every endpoint, request body, and response schema.
+  </Card>
+</CardGroup>

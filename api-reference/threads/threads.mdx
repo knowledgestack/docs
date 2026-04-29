@@ -1,0 +1,324 @@
+---
+title: "Threads"
+description: "Create and manage AI conversation sessions grounded in your knowledge base."
+---
+
+Threads are persistent AI conversation sessions. Each thread holds an ordered sequence of messages — user inputs and AI-generated responses — and the AI grounds its answers in the content of your knowledge base.
+
+The typical flow is:
+
+1. Create a thread with `POST /v1/threads`.
+2. Open the SSE stream with `GET /v1/threads/{thread_id}/stream` (before or after sending a message).
+3. Send a user message with `POST /v1/threads/{thread_id}/user_message`.
+4. Consume the streamed AI response from the SSE connection.
+
+---
+
+## POST /v1/threads
+
+Create a new thread. Returns `201` on success.
+
+```
+POST https://api-staging.knowledgestack.ai/v1/threads
+```
+
+### Request body
+
+<ParamField body="title" type="string">
+  A display title for the thread (1–255 characters). Mutually exclusive with `message_for_title`.
+</ParamField>
+
+<ParamField body="message_for_title" type="string">
+  Provide a message string (up to 4096 characters) and the API will automatically generate a title from it. The string itself is **not** stored as a thread message. Mutually exclusive with `title`.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string">
+  UUID of the parent path part to create the thread under. When omitted, the thread is created in your user's personal threads folder (`/users/{user_id}/threads/`), which is auto-provisioned if it does not exist.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Thread UUID.
+</ResponseField>
+
+<ResponseField name="path_part_id" type="string">
+  UUID of the path part node representing this thread in the hierarchy.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Thread title.
+</ResponseField>
+
+<ResponseField name="parent_thread_id" type="string | null">
+  UUID of a parent thread if this is a subthread, otherwise `null`.
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string">
+  Full slash-delimited path from root to this thread.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant that owns this thread.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/threads \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Refund policy questions"
+  }'
+```
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "path_part_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "title": "Refund policy questions",
+  "parent_thread_id": null,
+  "materialized_path": "/users/u1a2b3c4/threads/a1b2c3d4",
+  "tenant_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "created_at": "2025-04-01T12:00:00Z",
+  "updated_at": "2025-04-01T12:00:00Z"
+}
+```
+
+---
+
+## GET /v1/threads
+
+List threads. When `parent_path_part_id` is omitted, returns threads from the authenticated user's personal threads folder.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/threads
+```
+
+**Query parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `parent_path_part_id` | string (UUID) | — | List threads under this path part. Omit to list your own conversation threads. |
+| `limit` | integer | `20` | Items per page (1–100). |
+| `offset` | integer | `0` | Items to skip for pagination. |
+
+Returns a paginated list of `ThreadResponse` objects.
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/threads?limit=20&offset=0" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## GET /v1/threads/{thread_id}
+
+Get a single thread by ID.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/threads/{thread_id}
+```
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## PATCH /v1/threads/{thread_id}
+
+Update a thread's title and/or parent thread link. Only include the fields you want to change.
+
+```
+PATCH https://api-staging.knowledgestack.ai/v1/threads/{thread_id}
+```
+
+### Request body
+
+<ParamField body="title" type="string">
+  New title for the thread (1–255 characters).
+</ParamField>
+
+<ParamField body="parent_thread_id" type="string | null">
+  Link this thread to a parent thread by UUID, or set to `null` to clear the link.
+</ParamField>
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Subscription & refund policy"}'
+```
+
+---
+
+## DELETE /v1/threads/{thread_id}
+
+Delete a thread. Returns `204 No Content` on success.
+
+```
+DELETE https://api-staging.knowledgestack.ai/v1/threads/{thread_id}
+```
+
+<Note>
+  Only conversation threads in your personal threads folder (`/users/{user_id}/threads/`) can be deleted via this endpoint. Threads attached to documents or sections are not deletable here.
+</Note>
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## POST /v1/threads/{thread_id}/user_message
+
+Send a user message and trigger AI generation. The endpoint returns `202 Accepted` immediately with a `workflow_id` — the AI response is generated asynchronously and streamed via SSE.
+
+```
+POST https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/user_message
+```
+
+### Request body
+
+<ParamField body="input_text" type="string">
+  The user's message text. Defaults to an empty string.
+</ParamField>
+
+### Response
+
+<ResponseField name="workflow_id" type="string">
+  The ID of the background workflow driving AI generation. You can use this to monitor generation status.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/user_message \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"input_text": "What is our refund policy for annual subscriptions?"}'
+```
+
+```json
+{
+  "workflow_id": "wf_9c8b7a6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4"
+}
+```
+
+---
+
+## GET /v1/threads/{thread_id}/stream
+
+Open a Server-Sent Events (SSE) stream to receive the AI response in real time.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/stream
+```
+
+Connect to this endpoint **before or immediately after** calling `POST /user_message`. The server will replay any missed events if you supply `last_message_id` and `last_entry_id`.
+
+**Query parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `last_message_id` | string (UUID) | Resume the stream from after this message ID. |
+| `last_entry_id` | string | Resume the stream from after this stream entry ID. |
+
+### SSE event format
+
+Each event has a `data` field containing a JSON payload. Events are separated by double newlines (`\n\n`). Common event types include token deltas, message completion signals, and citation data.
+
+```
+data: {"type": "token", "delta": "Annual subscriptions are"}
+
+data: {"type": "token", "delta": " eligible for a full refund"}
+
+data: {"type": "message_complete", "message_id": "d4e5f6a7-..."}
+```
+
+### Consuming the stream in JavaScript
+
+```javascript
+const eventSource = new EventSource(
+  'https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/stream',
+  {
+    headers: { Authorization: 'Bearer <your-api-key>' }
+  }
+);
+
+eventSource.onmessage = (event) => {
+  const payload = JSON.parse(event.data);
+  if (payload.type === 'token') {
+    process.stdout.write(payload.delta);
+  } else if (payload.type === 'message_complete') {
+    console.log('\nDone. Message ID:', payload.message_id);
+    eventSource.close();
+  }
+};
+
+eventSource.onerror = (err) => {
+  console.error('Stream error:', err);
+  eventSource.close();
+};
+```
+
+<Note>
+  The browser `EventSource` API does not support custom headers. In browser environments, pass your API key as a cookie or use a server-side proxy.
+</Note>
+
+### Consuming the stream in Python
+
+```python
+import httpx
+import json
+
+thread_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+url = f"https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/stream"
+headers = {"Authorization": "Bearer <your-api-key>"}
+
+with httpx.stream("GET", url, headers=headers) as response:
+    for line in response.iter_lines():
+        if line.startswith("data: "):
+            payload = json.loads(line[6:])
+            if payload.get("type") == "token":
+                print(payload["delta"], end="", flush=True)
+            elif payload.get("type") == "message_complete":
+                print(f"\nDone. Message ID: {payload['message_id']}")
+                break
+```
+
+---
+
+## Complete example: create a thread, send a message, read the stream
+
+```bash
+# 1. Create a thread
+THREAD=$(curl -s -X POST https://api-staging.knowledgestack.ai/v1/threads \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Support session"}')
+
+THREAD_ID=$(echo $THREAD | jq -r '.id')
+
+# 2. Open the SSE stream in the background
+curl -s "https://api-staging.knowledgestack.ai/v1/threads/${THREAD_ID}/stream" \
+  -H "Authorization: Bearer <your-api-key>" &
+
+# 3. Send the user message
+curl -X POST "https://api-staging.knowledgestack.ai/v1/threads/${THREAD_ID}/user_message" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"input_text": "What are our SLA commitments?"}'
+```

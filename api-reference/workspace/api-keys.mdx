@@ -1,0 +1,162 @@
+---
+title: "API Keys"
+description: "Create and manage API keys for server-to-server authentication."
+---
+
+API keys let you authenticate requests to the Knowledge Stack API without a user session. They are intended for server-to-server integrations where there is no interactive user login.
+
+Pass your key in the `Authorization` header of every request:
+
+```bash
+Authorization: Bearer <your-api-key>
+```
+
+<Warning>
+  The full key value is only returned once, immediately after creation. Store it securely — you cannot retrieve it again.
+</Warning>
+
+## Create API key
+
+Creates a new API key and returns its full value. Store the returned `key` immediately.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/api-keys
+```
+
+<ParamField body="name" type="string" required>
+  A human-readable label for this key (1–100 characters). Use a descriptive name so you can identify the key's purpose later.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/api-keys \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "production-ingest-service"}'
+```
+
+**Response** — `CreateApiKeyResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the API key.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The label you assigned to this key.
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  The full API key value. **This is the only time it will be shown.** Copy it now and store it securely (e.g. in a secrets manager).
+</ResponseField>
+
+<ResponseField name="key_suffix" type="string">
+  The last few characters of the key, shown in list views so you can identify keys without exposing the full value.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of key creation.
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "id": "k1k2k3k4-...",
+  "name": "production-ingest-service",
+  "key": "ks_live_abcdefghijklmnopqrstuvwxyz123456",
+  "key_suffix": "3456",
+  "created_at": "2026-04-04T10:00:00Z"
+}
+```
+
+---
+
+## List API keys
+
+Returns metadata for all API keys in the current tenant. The full key value is never returned in list or get responses.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/api-keys
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/api-keys \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[ApiKeyResponse]`
+
+<ResponseField name="id" type="string">
+  UUID of the API key.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Label assigned to the key.
+</ResponseField>
+
+<ResponseField name="key_suffix" type="string">
+  Last few characters of the key for identification purposes.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of key creation.
+</ResponseField>
+
+---
+
+## Get API key
+
+Returns metadata for a single API key. The full key value is not included.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/api-keys/{api_key_id}
+```
+
+<ParamField path="api_key_id" type="string" required>
+  UUID of the API key.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/api-keys/k1k2k3k4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `ApiKeyResponse`
+
+---
+
+## Revoke API key
+
+Permanently deletes an API key. Any requests using this key will immediately start returning `401 Unauthorized`.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/api-keys/{api_key_id}
+```
+
+<ParamField path="api_key_id" type="string" required>
+  UUID of the API key to revoke.
+</ParamField>
+
+<Warning>
+  Revocation is immediate and irreversible. Ensure you've rotated the key in all services that use it before revoking.
+</Warning>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/api-keys/k1k2k3k4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```

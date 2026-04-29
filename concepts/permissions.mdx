@@ -1,0 +1,211 @@
+---
+title: "Permissions"
+description: "Control who can read, write, or administer specific folders and documents using user permissions and group permissions."
+---
+
+Knowledge Stack uses a **path-based permission system**. You grant access to a path — a folder or a document — and that access applies to everything nested under it. Two mechanisms exist: user permissions (direct, per-user grants) and group permissions (bulk grants via tenant groups).
+
+---
+
+## Permission capabilities
+
+Both user and group permissions share the same set of capabilities (`PermissionCapability`):
+
+| Capability | What it allows |
+|---|---|
+| `read` | View the content at the path and all children |
+| `write` | Create and modify content at the path and all children |
+| `admin` | Full control — read, write, and manage permissions at the path |
+
+---
+
+## User permissions
+
+A **user permission** grants a specific user a capability on a specific path. This is the most precise form of access control.
+
+### Grant access to a user
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/user-permissions
+Content-Type: application/json
+
+{
+  "user_id": "usr_abc123",
+  "path_part_id": "pth_xyz789",
+  "capability": "read"
+}
+```
+
+The `path_part_id` refers to the path part for the folder or document you want to protect. See [Knowledge Model](/concepts/knowledge-model#path-parts) for how path parts work.
+
+### List, update, and revoke
+
+```http
+GET https://api-staging.knowledgestack.ai/v1/user-permissions
+```
+
+```http
+PATCH https://api-staging.knowledgestack.ai/v1/user-permissions/{permission_id}
+Content-Type: application/json
+
+{
+  "capability": "write"
+}
+```
+
+```http
+DELETE https://api-staging.knowledgestack.ai/v1/user-permissions/{permission_id}
+```
+
+<Note>
+  User permissions take precedence over group permissions. If a user has an explicit user permission on a path, that capability is used regardless of what any of their groups have.
+</Note>
+
+---
+
+## Tenant groups and group permissions
+
+A **tenant group** is a named collection of users within a tenant. Assigning a permission to a group grants every member of that group the same access — without needing to manage individual user permissions.
+
+### Create a group
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups
+Content-Type: application/json
+
+{
+  "name": "Engineering"
+}
+```
+
+### Add members
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/members
+Content-Type: application/json
+
+{
+  "user_id": "usr_abc123"
+}
+```
+
+Remove a member with `DELETE /v1/tenant-groups/{group_id}/members/{user_id}`.
+
+### Grant a group access to a path
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions
+Content-Type: application/json
+
+{
+  "path_part_id": "pth_xyz789",
+  "capability": "read"
+}
+```
+
+Update or revoke group permissions the same way as user permissions:
+
+```http
+PATCH https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions/{permission_id}
+```
+
+```http
+DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions/{permission_id}
+```
+
+---
+
+## Path inheritance
+
+Permissions apply to the path they are assigned to **and all of its descendants**. Granting `read` on a folder automatically covers every document and sub-folder inside it.
+
+```
+/Product Docs          ← grant "read" here
+  /Engineering         ← automatically readable
+    /API Spec v2.pdf   ← automatically readable
+  /Design              ← automatically readable
+```
+
+If you need to restrict access to a specific sub-path, grant a narrower permission at that level. More specific paths win over broader ones.
+
+---
+
+## User permissions vs. group permissions
+
+| | User permissions | Group permissions |
+|---|---|---|
+| **Scope** | One user, one path | All group members, one path |
+| **Best for** | One-off grants, exceptions | Team-wide or role-based access |
+| **Precedence** | Takes priority over group permissions | Applied when no user permission exists |
+| **Endpoint** | `POST /v1/user-permissions` | `POST /v1/tenant-groups/{group_id}/permissions` |
+
+<Tip>
+  Start with group permissions for standard access patterns, then use user permissions for exceptions. This keeps your permission set small and easy to audit.
+</Tip>
+
+---
+
+## Checking your own groups
+
+A user can see which groups they belong to with:
+
+```http
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups/my-group
+```
+
+This is useful for building UIs or debugging access issues without requiring admin privileges.
+
+---
+
+## How to grant access: end-to-end example
+
+<Steps>
+  <Step title="Find the path part for the target folder or document">
+    ```http
+    GET https://api-staging.knowledgestack.ai/v1/path-parts
+    ```
+
+    Identify the `id` of the folder or document you want to protect.
+  </Step>
+  <Step title="Choose your approach">
+    - For a single user: use `POST /v1/user-permissions`
+    - For a team: create or reuse a group, then use `POST /v1/tenant-groups/{group_id}/permissions`
+  </Step>
+  <Step title="Create the permission">
+    <CodeGroup>
+
+    ```http User permission
+    POST https://api-staging.knowledgestack.ai/v1/user-permissions
+    Content-Type: application/json
+
+    {
+      "user_id": "usr_abc123",
+      "path_part_id": "pth_xyz789",
+      "capability": "write"
+    }
+    ```
+
+    ```http Group permission
+    POST https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions
+    Content-Type: application/json
+
+    {
+      "path_part_id": "pth_xyz789",
+      "capability": "write"
+    }
+    ```
+
+    </CodeGroup>
+  </Step>
+  <Step title="Verify access">
+    List the permissions on the path to confirm the grant was applied:
+
+    ```http
+    GET https://api-staging.knowledgestack.ai/v1/user-permissions
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Tenant admins bypass path-based permissions and have access to all content in the tenant. Assign the `admin` role only to users who need unrestricted access.
+</Warning>

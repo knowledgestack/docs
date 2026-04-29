@@ -1,0 +1,405 @@
+---
+title: "Documents"
+description: "Upload, create, and manage documents within your folder hierarchy."
+---
+
+A document is a named container within a folder that holds one or more [document versions](/api-reference/knowledge/document-versions). Every document has an active version — the version used for search and retrieval unless otherwise specified.
+
+## Document types
+
+The `DocumentType` enum describes the file format:
+
+| Value | Description |
+|-------|-------------|
+| `PDF` | PDF file |
+| `DOCX` | Microsoft Word document |
+| `PLAINTEXT` | Plain text file |
+| `IMAGE` | Image file |
+| `XLSX` | Microsoft Excel spreadsheet |
+| `CSV` | Comma-separated values |
+| `PPTX` | Microsoft PowerPoint presentation |
+| `UNKNOWN` | Unrecognized or unspecified format |
+
+## Document origins
+
+The `DocumentOrigin` enum describes where the document came from:
+
+| Value | Description |
+|-------|-------------|
+| `SOURCE` | Uploaded directly by a user or integration |
+| `GENERATED` | Produced by the system (e.g. an AI-generated output) |
+
+---
+
+## Ingest document
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/documents/ingest`
+
+Upload a file, create a document and its initial version (`v0`), and trigger the ingestion pipeline. This is the primary way to add content to Knowledge Stack.
+
+The request must be `multipart/form-data`.
+
+### Request body (multipart)
+
+<ParamField body="file" type="file" required>
+  The file to upload.
+</ParamField>
+
+<ParamField body="path_part_id" type="string (uuid)" required>
+  `path_part_id` of the parent folder. Must reference a `FOLDER` type path part.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Document name. Defaults to the uploaded filename if omitted.
+</ParamField>
+
+<ParamField body="ingestion_mode" type="string">
+  Ingestion pipeline mode. One of:
+  - `high_accuracy` — default for PDF; uses high-quality conversion
+  - `standard` — default for DOCX, XLSX, PPTX, PLAINTEXT
+  - `single_chunk` — default for IMAGE and CSV; treats the entire file as one chunk
+
+  Auto-resolved based on file type when omitted.
+</ParamField>
+
+<ParamField body="chunk_type" type="string">
+  Force a specific chunk type (`TABLE`, `IMAGE`, or `HTML`). Only valid with `single_chunk` mode.
+</ParamField>
+
+<ParamField body="secondary_taxonomy" type="string">
+  Force secondary taxonomy (e.g. `picture`, `flowchart`). Only valid with `single_chunk` mode and `chunk_type=IMAGE`.
+</ParamField>
+
+<ParamField body="page_dpi" type="integer">
+  DPI for PDF page screenshots. Range 36–216. Defaults to `72`.
+</ParamField>
+
+### Response `201`
+
+Returns an `IngestDocumentResponse`.
+
+<ResponseField name="document_id" type="string (uuid)">
+  ID of the created document.
+</ResponseField>
+<ResponseField name="document_version_id" type="string (uuid)">
+  ID of the created document version (v0).
+</ResponseField>
+<ResponseField name="workflow_id" type="string">
+  Workflow ID for tracking ingestion progress.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/ingest \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/report.pdf" \
+  -F "path_part_id=a1b2c3d4-0000-0000-0000-000000000000" \
+  -F "name=Q4 Report"
+```
+
+```json
+{
+  "document_id": "d1e2f3a4-0000-0000-0000-000000000001",
+  "document_version_id": "b2c3d4e5-0000-0000-0000-000000000002",
+  "workflow_id": "ingest-abc123"
+}
+```
+
+---
+
+## Ingest document version
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/documents/{document_id}/ingest`
+
+Upload a new file for an existing document, creating a new version and triggering ingestion. The new version is automatically assigned the next version number.
+
+### Path parameters
+
+<ParamField path="document_id" type="string (uuid)" required>
+  The document to create a new version for.
+</ParamField>
+
+### Request body (multipart)
+
+<ParamField body="file" type="file" required>
+  The new file to upload.
+</ParamField>
+
+<ParamField body="ingestion_mode" type="string">
+  Ingestion mode (same options as [ingest document](#ingest-document)).
+</ParamField>
+
+<ParamField body="chunk_type" type="string">
+  Force chunk type. Only valid with `single_chunk` mode.
+</ParamField>
+
+<ParamField body="secondary_taxonomy" type="string">
+  Force secondary taxonomy. Only valid with `single_chunk` and `chunk_type=IMAGE`.
+</ParamField>
+
+<ParamField body="page_dpi" type="integer">
+  DPI for PDF page screenshots. Range 36–216. Defaults to `72`.
+</ParamField>
+
+### Response `201`
+
+Returns an `IngestDocumentResponse` with the new `document_version_id`.
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/<document-id>/ingest \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/report-v2.pdf"
+```
+
+---
+
+## Create document
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/documents`
+
+Create a new empty document (with an empty `v0` version) without uploading a file. Use this when you intend to populate the document manually via the [sections](/api-reference/knowledge/sections) and [chunks](/api-reference/knowledge/chunks) APIs rather than through file ingestion.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Document name. 1–255 characters.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)" required>
+  `path_part_id` of the parent folder.
+</ParamField>
+
+<ParamField body="document_type" type="string" required>
+  The document type. One of the `DocumentType` enum values.
+</ParamField>
+
+<ParamField body="document_origin" type="string" required>
+  The document origin. One of `SOURCE` or `GENERATED`.
+</ParamField>
+
+### Response `200`
+
+Returns a `DocumentResponse`.
+
+<ResponseField name="id" type="string (uuid)">
+  Document ID.
+</ResponseField>
+<ResponseField name="path_part_id" type="string (uuid)">
+  Underlying path part ID.
+</ResponseField>
+<ResponseField name="name" type="string">
+  Document name.
+</ResponseField>
+<ResponseField name="parent_path_part_id" type="string (uuid) | null">
+  Parent folder's path part ID.
+</ResponseField>
+<ResponseField name="document_type" type="string">
+  Document type enum value.
+</ResponseField>
+<ResponseField name="document_origin" type="string">
+  Document origin enum value.
+</ResponseField>
+<ResponseField name="active_version_id" type="string (uuid)">
+  ID of the currently active version.
+</ResponseField>
+<ResponseField name="active_version" type="DocumentVersionResponse">
+  Full details of the active version. See [Document Versions](/api-reference/knowledge/document-versions) for field descriptions.
+</ResponseField>
+<ResponseField name="materialized_path" type="string">
+  Full path from root.
+</ResponseField>
+<ResponseField name="system_managed" type="boolean">
+  Whether this document is system-managed.
+</ResponseField>
+<ResponseField name="tenant_id" type="string (uuid)">
+  Owning tenant.
+</ResponseField>
+<ResponseField name="created_at" type="string (datetime)">
+  Creation timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="updated_at" type="string (datetime)">
+  Last update timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="tags" type="TagResponse[] | null">
+  Tags attached to this document.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "API Design Notes",
+    "parent_path_part_id": "a1b2c3d4-0000-0000-0000-000000000000",
+    "document_type": "PLAINTEXT",
+    "document_origin": "SOURCE"
+  }'
+```
+
+---
+
+## List documents
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/documents`
+
+List direct child documents of a parent folder.
+
+### Query parameters
+
+<ParamField query="parent_path_part_id" type="string (uuid)">
+  Filter to documents in this folder. Defaults to the tenant's shared root.
+</ParamField>
+
+<ParamField query="sort_order" type="string">
+  Sort order. One of `NAME`, `UPDATED_AT`, `CREATED_AT`.
+</ParamField>
+
+<ParamField query="with_tags" type="boolean">
+  Include tags in each result. Defaults to `false`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated list of `DocumentResponse` objects.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/documents?parent_path_part_id=<folder-path-part-id>&limit=20" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get document
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/documents/{document_id}`
+
+Get a single document by ID, including its active version details.
+
+### Path parameters
+
+<ParamField path="document_id" type="string (uuid)" required>
+  The document ID.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="with_tags" type="boolean">
+  Include tags in the response. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns a `DocumentResponse`. See [Create document](#create-document) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/documents/<document-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Update document
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/documents/{document_id}`
+
+Rename a document, move it to a different folder, or change its active version. All fields are optional.
+
+### Path parameters
+
+<ParamField path="document_id" type="string (uuid)" required>
+  The document ID to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string">
+  New document name. 1–255 characters.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)">
+  Move the document to this parent folder (`path_part_id` of the destination folder).
+</ParamField>
+
+<ParamField body="active_version_id" type="string (uuid)">
+  Set a different version as the active version.
+</ParamField>
+
+### Response `200`
+
+Returns the updated `DocumentResponse`.
+
+### Example
+
+```bash
+# Rename
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/documents/<document-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Q4 Report Final"}'
+
+# Promote a version to active
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/documents/<document-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"active_version_id": "<version-id>"}'
+```
+
+---
+
+## Delete document
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/documents/{document_id}`
+
+Delete a document and all of its contents.
+
+<Note>
+  This is a cascading delete. All versions, sections, and chunks belonging to this document are permanently removed. This action cannot be undone.
+</Note>
+
+### Path parameters
+
+<ParamField path="document_id" type="string (uuid)" required>
+  The document ID to delete.
+</ParamField>
+
+### Response `200`
+
+Returns an empty `{}` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/documents/<document-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```

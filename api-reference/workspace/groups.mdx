@@ -1,0 +1,456 @@
+---
+title: "Groups"
+description: "Manage user groups and assign folder/document permissions collectively."
+---
+
+Groups let you bundle users together and assign permissions to the group as a whole. Any permission you grant to a group applies to all of its members, making it easy to manage access at scale.
+
+## List my groups
+
+Returns all groups the authenticated user belongs to within the current tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups/my-group
+```
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenant-groups/my-group \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — list of `GroupResponse`
+
+---
+
+## List all groups
+
+Returns all groups in the current tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenant-groups \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[GroupResponse]`
+
+<ResponseField name="id" type="string">
+  UUID of the group.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant this group belongs to.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name of the group.
+</ResponseField>
+
+<ResponseField name="description" type="string | null">
+  Optional description of the group's purpose.
+</ResponseField>
+
+<ResponseField name="member_count" type="integer | null">
+  Number of users in the group.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of group creation.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+---
+
+## Create group
+
+Creates a new group in the current tenant.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups
+```
+
+<ParamField body="name" type="string" required>
+  Display name for the group (1–255 characters).
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description (up to 1024 characters).
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenant-groups \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Engineering", "description": "All engineering team members"}'
+```
+
+**Response** — `GroupResponse`
+
+---
+
+## Get group
+
+Returns details for a single group.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `GroupResponse`
+
+---
+
+## Update group
+
+Updates a group's name or description. All fields are optional.
+
+```bash
+PATCH https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group to update.
+</ParamField>
+
+<ParamField body="name" type="string">
+  New display name (1–255 characters).
+</ParamField>
+
+<ParamField body="description" type="string">
+  New description.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-... \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Engineering — Backend"}'
+```
+
+**Response** — `GroupResponse`
+
+---
+
+## Delete group
+
+Permanently deletes a group. Member users are not deleted, but they lose any permissions previously granted to this group.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group to delete.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## List group members
+
+Returns all users who belong to a group.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/members
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../members \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[MembershipResponse]`
+
+<ResponseField name="id" type="string">
+  UUID of the membership record.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant.
+</ResponseField>
+
+<ResponseField name="group_id" type="string">
+  UUID of the group.
+</ResponseField>
+
+<ResponseField name="user_id" type="string">
+  UUID of the user.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the user was added to the group.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+---
+
+## Add group member
+
+Adds a user to a group.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/members
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField body="user_id" type="string" required>
+  UUID of the user to add.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../members \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "u1u2u3u4-..."}'
+```
+
+**Response** — `MembershipResponse`
+
+---
+
+## Remove group member
+
+Removes a user from a group. The user's account is not affected.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/members/{user_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField path="user_id" type="string" required>
+  UUID of the user to remove.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../members/u1u2u3u4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## List group permissions
+
+Returns all path permissions assigned to a group.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../permissions \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[GroupPermissionResponse]`
+
+<ResponseField name="id" type="string">
+  UUID of the permission record.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant.
+</ResponseField>
+
+<ResponseField name="group_id" type="string">
+  UUID of the group this permission belongs to.
+</ResponseField>
+
+<ResponseField name="path_part_id" type="string">
+  UUID of the path part (folder or document) this permission applies to.
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string">
+  Full path string for the resource.
+</ResponseField>
+
+<ResponseField name="capability" type="string">
+  The level of access granted. One of `READ_ONLY`, `READ_WRITE`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the permission was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+---
+
+## Create group permission
+
+Grants a group access to a specific path part (folder or document).
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField body="path_part_id" type="string" required>
+  UUID of the path part to grant access to.
+</ParamField>
+
+<ParamField body="capability" type="string" required>
+  Access level to grant. One of:
+
+  | Value        | Description                        |
+  |--------------|------------------------------------|
+  | `READ_ONLY`  | Group members can view the resource. |
+  | `READ_WRITE` | Group members can view and modify the resource. |
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../permissions \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"path_part_id": "p1p2p3p4-...", "capability": "READ_WRITE"}'
+```
+
+**Response** — `GroupPermissionResponse`
+
+---
+
+## Update group permission
+
+Updates the capability of an existing group permission.
+
+```bash
+PATCH https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions/{permission_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField path="permission_id" type="string" required>
+  UUID of the permission to update.
+</ParamField>
+
+<ParamField body="path_part_id" type="string">
+  UUID of the new path part target.
+</ParamField>
+
+<ParamField body="capability" type="string">
+  Updated capability. One of `READ_ONLY`, `READ_WRITE`.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../permissions/pm1pm2pm3-... \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"capability": "READ_ONLY"}'
+```
+
+**Response** — `GroupPermissionResponse`
+
+---
+
+## Delete group permission
+
+Revokes a permission from a group.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/{group_id}/permissions/{permission_id}
+```
+
+<ParamField path="group_id" type="string" required>
+  UUID of the group.
+</ParamField>
+
+<ParamField path="permission_id" type="string" required>
+  UUID of the permission to revoke.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/tenant-groups/g1g2g3g4-.../permissions/pm1pm2pm3-... \
+  -H "Authorization: Bearer <your-api-key>"
+```

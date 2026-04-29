@@ -1,0 +1,521 @@
+---
+title: "Chunks"
+description: "Create, retrieve, search, and manage the atomic content units that power semantic search."
+---
+
+Chunks are the atomic content units of Knowledge Stack. Each chunk holds a piece of text (or a reference to a visual asset), is associated with a vector embedding, and belongs to a section or directly to a document version. Chunks are the objects returned by semantic search.
+
+## Chunk types
+
+The `ChunkType` enum classifies the content of a chunk:
+
+| Value | Description |
+|-------|-------------|
+| `TEXT` | Plain text content |
+| `TABLE` | Tabular data |
+| `IMAGE` | Image (the `content` field holds a description or alt text; visual assets are linked in `asset_urls`) |
+| `HTML` | HTML markup |
+| `UNKNOWN` | Unclassified content |
+
+## Search types
+
+The `SearchType` enum controls the retrieval strategy for [chunk search](#search-chunks):
+
+| Value | Description |
+|-------|-------------|
+| `dense_only` | Dense vector (semantic) search using cosine similarity |
+| `full_text` | Full-text keyword search using BM25 |
+
+---
+
+## Create chunk
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/chunks`
+
+Create a new chunk with content. The chunk is attached to a parent section or document version and is positioned within the sibling list.
+
+### Request body
+
+<ParamField body="parent_path_id" type="string (uuid)" required>
+  `path_part_id` of the parent. Must be a `DOCUMENT_VERSION` or `SECTION` type path part.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  Chunk text content. Minimum 1 character. For `IMAGE` chunks, this is typically a description or extracted alt text.
+</ParamField>
+
+<ParamField body="chunk_type" type="string" required>
+  Type of the chunk. One of `TEXT`, `TABLE`, `IMAGE`, `HTML`, `UNKNOWN`.
+</ParamField>
+
+<ParamField body="chunk_metadata" type="object" required>
+  Metadata object for the chunk. Pass `{}` if no metadata is needed. Key optional fields:
+  - `summary` (string) — LLM-generated summary used to enrich embeddings for `TABLE` and `HTML` chunks
+  - `polygons` (array) — bounding box references in the source document
+  - `asset_urls` (string[]) — ordered URLs to visual assets
+  - `sheet_name` (string) — worksheet name (XLSX only)
+  - `cell_range` (string) — cell range e.g. `A1:D10` (XLSX only)
+</ParamField>
+
+<ParamField body="prev_sibling_path_id" type="string (uuid)">
+  Insert after this sibling `path_part_id`. Omit to append to the end of the sibling list.
+</ParamField>
+
+### Response `200`
+
+Returns a `ChunkResponse`.
+
+<ResponseField name="id" type="string (uuid)">
+  Chunk ID.
+</ResponseField>
+<ResponseField name="path_part_id" type="string (uuid)">
+  Underlying path part ID.
+</ResponseField>
+<ResponseField name="content_id" type="string (uuid)">
+  ID of the content record (content is deduplicated by hash).
+</ResponseField>
+<ResponseField name="content" type="string">
+  Chunk text content.
+</ResponseField>
+<ResponseField name="chunk_type" type="string">
+  Chunk type enum value.
+</ResponseField>
+<ResponseField name="chunk_metadata" type="object">
+  Chunk metadata object.
+</ResponseField>
+<ResponseField name="num_tokens" type="integer | null">
+  Token count of the content.
+</ResponseField>
+<ResponseField name="parent_path_id" type="string (uuid)">
+  Parent path part ID.
+</ResponseField>
+<ResponseField name="prev_sibling_path_id" type="string (uuid) | null">
+  Previous sibling path part ID.
+</ResponseField>
+<ResponseField name="next_sibling_path_id" type="string (uuid) | null">
+  Next sibling path part ID.
+</ResponseField>
+<ResponseField name="materialized_path" type="string">
+  Full path from root.
+</ResponseField>
+<ResponseField name="system_managed" type="boolean">
+  Whether this chunk is system-managed.
+</ResponseField>
+<ResponseField name="tenant_id" type="string (uuid)">
+  Owning tenant.
+</ResponseField>
+<ResponseField name="created_at" type="string (datetime)">
+  Creation timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="updated_at" type="string (datetime)">
+  Last update timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="asset_urls" type="string[]">
+  Time-limited URLs to visual assets. Populated for `IMAGE`, `TABLE`, and `HTML` chunks.
+</ResponseField>
+<ResponseField name="document" type="object | null">
+  Lightweight ancestor document info. Populated when `with_document=true` is passed on GET requests.
+</ResponseField>
+<ResponseField name="document_version" type="object | null">
+  Lightweight ancestor version info. Populated when `with_document=true`.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "parent_path_id": "<section-path-part-id>",
+    "content": "Knowledge Stack organizes content into folders, documents, versions, sections, and chunks.",
+    "chunk_type": "TEXT",
+    "chunk_metadata": {}
+  }'
+```
+
+---
+
+## Search chunks
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/chunks/search`
+
+Search chunks using dense vector (semantic) or BM25 full-text retrieval. Returns ranked results with similarity scores.
+
+### Request body
+
+<ParamField body="query" type="string" required>
+  The search query. Minimum 1 character.
+</ParamField>
+
+<ParamField body="search_type" type="string">
+  Retrieval strategy. One of `dense_only` (semantic, default) or `full_text` (BM25 keyword).
+</ParamField>
+
+<ParamField body="parent_path_ids" type="string (uuid)[]">
+  Restrict search to descendants of these path part IDs. Defaults to the tenant's shared root if omitted.
+</ParamField>
+
+<ParamField body="tag_ids" type="string (uuid)[]">
+  Filter results to chunks that have **all** of the specified tags (AND logic).
+</ParamField>
+
+<ParamField body="chunk_types" type="string[]">
+  Filter by chunk types. Only chunks matching one of the listed types are returned.
+</ParamField>
+
+<ParamField body="ingestion_time_after" type="string (datetime)">
+  Only return chunks ingested after this ISO 8601 timestamp.
+</ParamField>
+
+<ParamField body="active_version_only" type="boolean">
+  When `true` (default), only chunks from the document's active version are returned.
+</ParamField>
+
+<ParamField body="top_k" type="integer">
+  Maximum number of results to return. Range 1–50. Defaults to `5`.
+</ParamField>
+
+<ParamField body="score_threshold" type="number">
+  Minimum similarity score. Results below this threshold are excluded. Defaults to `0.3`.
+</ParamField>
+
+<ParamField body="with_document" type="boolean">
+  Include ancestor `document_id` and `document_version_id` in each result. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns an array of `ScoredChunkResponse` objects sorted by descending score.
+
+<ResponseField name="score" type="number">
+  Cosine similarity score (range 0–1 for dense search, BM25 score for full-text).
+</ResponseField>
+
+All other fields are identical to `ChunkResponse`. See [Create chunk](#create-chunk) for field descriptions.
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "how does authentication work",
+    "search_type": "dense_only",
+    "top_k": 10,
+    "score_threshold": 0.5,
+    "with_document": true
+  }'
+```
+
+```json
+[
+  {
+    "id": "c3d4e5f6-0000-0000-0000-000000000003",
+    "content": "Knowledge Stack supports API key and UAT-based authentication...",
+    "chunk_type": "TEXT",
+    "score": 0.87,
+    "document": {
+      "id": "d1e2f3a4-0000-0000-0000-000000000001",
+      "name": "Auth Guide",
+      "document_type": "PLAINTEXT",
+      "document_origin": "SOURCE"
+    },
+    ...
+  }
+]
+```
+
+---
+
+## Get chunks (bulk)
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/chunks/bulk`
+
+Fetch multiple chunks by ID in a single request. Returns `ChunkBulkResponse` objects that include the full `path_part_id_segments` — the ordered ancestor chain from root to the chunk.
+
+<Note>
+  Non-existent IDs are silently skipped.
+</Note>
+
+### Query parameters
+
+<ParamField query="chunk_ids" type="string[]" required>
+  Comma-separated list of chunk IDs.
+</ParamField>
+
+### Response `200`
+
+Returns an array of `ChunkBulkResponse` objects. Identical to `ChunkResponse` plus:
+
+<ResponseField name="path_part_id_segments" type="string (uuid)[]">
+  Ordered list of ancestor path part IDs from root to this chunk.
+</ResponseField>
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/chunks/bulk?chunk_ids=<id-1>,<id-2>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get chunk IDs for a version
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/chunks/version-chunk-ids`
+
+Get all chunk IDs belonging to a document version. Useful for pipeline operations that need to enumerate chunks without fetching full content.
+
+### Query parameters
+
+<ParamField query="document_version_id" type="string (uuid)" required>
+  The document version ID.
+</ParamField>
+
+### Response `200`
+
+Returns a `VersionChunkIdsResponse`.
+
+<ResponseField name="chunk_ids" type="string (uuid)[]">
+  All chunk IDs in the specified document version.
+</ResponseField>
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/chunks/version-chunk-ids?document_version_id=<version-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "chunk_ids": [
+    "c3d4e5f6-0000-0000-0000-000000000003",
+    "d4e5f6a7-0000-0000-0000-000000000004"
+  ]
+}
+```
+
+---
+
+## Get chunk
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}`
+
+Get a single chunk by ID, including its full content.
+
+### Path parameters
+
+<ParamField path="chunk_id" type="string (uuid)" required>
+  The chunk ID.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="with_document" type="boolean">
+  Include ancestor document and version info in the response. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns a `ChunkResponse`. See [Create chunk](#create-chunk) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id>?with_document=true" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Update chunk metadata
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}`
+
+Update a chunk's metadata or move it to a different parent or position in the sibling list. Metadata is shallow-merged — only the keys you provide are updated.
+
+### Path parameters
+
+<ParamField path="chunk_id" type="string (uuid)" required>
+  The chunk ID to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="chunk_metadata" type="object">
+  Metadata fields to merge into the existing `chunk_metadata`. Partial updates are supported.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)">
+  Reparent to this path part ID. Must be a `DOCUMENT_VERSION` or `SECTION` within the same document version.
+</ParamField>
+
+<ParamField body="prev_sibling_path_id" type="string (uuid)">
+  Move after this sibling path part ID.
+</ParamField>
+
+<ParamField body="move_to_head" type="boolean">
+  Set to `true` to move to the head of the sibling list. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns the updated `ChunkResponse`.
+
+### Example
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "chunk_metadata": {
+      "summary": "This section describes the authentication model."
+    }
+  }'
+```
+
+---
+
+## Delete chunk
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}`
+
+Delete a chunk. The underlying content record may be preserved if shared by other chunks.
+
+### Path parameters
+
+<ParamField path="chunk_id" type="string (uuid)" required>
+  The chunk ID to delete.
+</ParamField>
+
+### Response `200`
+
+Returns an empty `{}` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get chunk neighbors
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}/neighbors`
+
+Walk the sibling linked list backward and forward from a given chunk to retrieve surrounding context. Useful for expanding a search result with adjacent content.
+
+The response returns items in order: preceding siblings → anchor chunk → succeeding siblings. Each item is a discriminated union of `ChunkContentItem` or `SectionContentItem`, identified by `part_type`.
+
+### Path parameters
+
+<ParamField path="chunk_id" type="string (uuid)" required>
+  The anchor chunk ID.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="prev" type="integer">
+  Number of preceding siblings to retrieve. Defaults to `0`.
+</ParamField>
+
+<ParamField query="next" type="integer">
+  Number of succeeding siblings to retrieve. Defaults to `0`.
+</ParamField>
+
+<ParamField query="chunks_only" type="boolean">
+  When `true`, skip section items and return only chunks. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns a `ChunkNeighborsResponse`.
+
+<ResponseField name="items" type="array">
+  Ordered list of siblings and the anchor chunk. Each item has a `part_type` field (`CHUNK` or `SECTION`).
+</ResponseField>
+<ResponseField name="anchor_index" type="integer">
+  The index of the anchor chunk in the `items` array.
+</ResponseField>
+
+### Example
+
+```bash
+# Get 2 chunks before and 2 after the anchor
+curl "https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id>/neighbors?prev=2&next=2" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "items": [
+    { "part_type": "CHUNK", "id": "...", "content": "Prior context..." },
+    { "part_type": "CHUNK", "id": "...", "content": "More prior context..." },
+    { "part_type": "CHUNK", "id": "<chunk-id>", "content": "Anchor chunk content..." },
+    { "part_type": "CHUNK", "id": "...", "content": "Following context..." },
+    { "part_type": "CHUNK", "id": "...", "content": "More following context..." }
+  ],
+  "anchor_index": 2
+}
+```
+
+---
+
+## Update chunk content
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}/content`
+
+Replace a chunk's text content. This creates a new content row — the previous content is preserved in the content history but the chunk points to the new version.
+
+<Note>
+  After updating content, the chunk's embedding is stale. Re-trigger embedding by running a `reembed` action on the parent document version.
+</Note>
+
+### Path parameters
+
+<ParamField path="chunk_id" type="string (uuid)" required>
+  The chunk ID to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="content" type="string" required>
+  New chunk text content. Minimum 1 character.
+</ParamField>
+
+### Response `200`
+
+Returns the updated `ChunkResponse`.
+
+### Example
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id>/content \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Updated content with corrected information."}'
+```

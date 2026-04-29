@@ -1,0 +1,348 @@
+---
+title: "Workflow Definitions"
+description: "Create and manage reusable workflow templates for processing pipelines."
+---
+
+A workflow definition is a reusable template that describes a processing pipeline — what sources to read from, what instructions to follow, where to write output, and how to run it. When you invoke a definition it produces a [Workflow Run](/api-reference/workflows/runs).
+
+Workflow definitions use a **self-hosted runner** model: you provide the runner URL and a webhook secret, and Knowledge Stack calls your runner when a workflow is triggered.
+
+## Create definition
+
+Creates a new workflow definition.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/workflow-definitions
+```
+
+<ParamField body="name" type="string" required>
+  Display name for the definition (up to 255 characters).
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description.
+</ParamField>
+
+<ParamField body="runner_type" type="string" required>
+  The runner that will execute the workflow. Currently the only supported value is `SELF_HOSTED`.
+</ParamField>
+
+<ParamField body="runner_config" type="object">
+  Configuration for the self-hosted runner.
+
+  <Expandable title="SelfHostedRunnerConfig fields">
+    <ParamField body="url" type="string" required>
+      The HTTP(S) URL Knowledge Stack will POST to when triggering the workflow.
+    </ParamField>
+    <ParamField body="webhook_secret" type="string" required>
+      Secret used to sign webhook payloads. Store this securely — it is write-only and not returned in API responses.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="source_path_part_ids" type="string[]" required>
+  UUIDs of path parts (folders or documents) that serve as the workflow's input sources. Between 1 and 20 items.
+</ParamField>
+
+<ParamField body="instruction_path_part_ids" type="string[]" required>
+  UUIDs of path parts containing the instructions or prompts the workflow uses. Between 1 and 20 items.
+</ParamField>
+
+<ParamField body="output_path_part_ids" type="string[]" required>
+  UUIDs of path parts where the workflow writes its output. Between 1 and 20 items.
+</ParamField>
+
+<ParamField body="template_path_part_id" type="string">
+  UUID of an optional template path part.
+</ParamField>
+
+<ParamField body="max_run_duration_seconds" type="integer">
+  Maximum number of seconds a single run may take before timing out. Between 60 and 86400 (24 hours). Defaults to `300`.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/workflow-definitions \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Document Summarizer",
+    "description": "Summarizes documents from the source folder into the output folder",
+    "runner_type": "SELF_HOSTED",
+    "runner_config": {
+      "url": "https://runner.example.com/webhook",
+      "webhook_secret": "your-webhook-secret"
+    },
+    "source_path_part_ids": ["src-path-uuid-..."],
+    "instruction_path_part_ids": ["instr-path-uuid-..."],
+    "output_path_part_ids": ["out-path-uuid-..."],
+    "max_run_duration_seconds": 600
+  }'
+```
+
+**Response** — `WorkflowDefinitionResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the workflow definition.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name.
+</ResponseField>
+
+<ResponseField name="description" type="string | null">
+  Optional description.
+</ResponseField>
+
+<ResponseField name="runner_type" type="string">
+  Runner type. Currently always `SELF_HOSTED`.
+</ResponseField>
+
+<ResponseField name="runner_config" type="object | null">
+  Response-safe runner configuration. The `webhook_secret` is never returned.
+
+  <Expandable title="SelfHostedRunnerConfigResponse fields">
+    <ResponseField name="url" type="string">
+      The runner webhook URL.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="source_path_part_ids" type="string[]">
+  UUIDs of source path parts.
+</ResponseField>
+
+<ResponseField name="instruction_path_part_ids" type="string[]">
+  UUIDs of instruction path parts.
+</ResponseField>
+
+<ResponseField name="output_path_part_ids" type="string[]">
+  UUIDs of output path parts.
+</ResponseField>
+
+<ResponseField name="template_path_part_id" type="string | null">
+  UUID of the template path part, if set.
+</ResponseField>
+
+<ResponseField name="max_run_duration_seconds" type="integer">
+  Timeout for each run in seconds.
+</ResponseField>
+
+<ResponseField name="is_active" type="boolean">
+  Whether the definition can be invoked. Inactive definitions reject new runs.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of creation.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last update.
+</ResponseField>
+
+---
+
+## List definitions
+
+Returns all workflow definitions in the current tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflow-definitions
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflow-definitions \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[WorkflowDefinitionResponse]`
+
+---
+
+## Get definition
+
+Returns a single workflow definition.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflow-definitions/{definition_id}
+```
+
+<ParamField path="definition_id" type="string" required>
+  UUID of the workflow definition.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflow-definitions/def-uuid-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowDefinitionResponse`
+
+---
+
+## Update definition
+
+Fully replaces a workflow definition. This is a PUT operation — all required fields must be included even if you only want to change one.
+
+```bash
+PUT https://api-staging.knowledgestack.ai/v1/workflow-definitions/{definition_id}
+```
+
+<ParamField path="definition_id" type="string" required>
+  UUID of the workflow definition to update.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name (up to 255 characters).
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description.
+</ParamField>
+
+<ParamField body="runner_type" type="string" required>
+  Runner type. Currently only `SELF_HOSTED`.
+</ParamField>
+
+<ParamField body="runner_config" type="object">
+  Self-hosted runner configuration (`url` and `webhook_secret`).
+</ParamField>
+
+<ParamField body="source_path_part_ids" type="string[]" required>
+  Replacement list of source path part UUIDs (1–20 items).
+</ParamField>
+
+<ParamField body="instruction_path_part_ids" type="string[]" required>
+  Replacement list of instruction path part UUIDs (1–20 items).
+</ParamField>
+
+<ParamField body="output_path_part_ids" type="string[]" required>
+  Replacement list of output path part UUIDs (1–20 items).
+</ParamField>
+
+<ParamField body="template_path_part_id" type="string">
+  UUID of the template path part.
+</ParamField>
+
+<ParamField body="max_run_duration_seconds" type="integer">
+  Timeout in seconds (60–86400). Defaults to `300`.
+</ParamField>
+
+<ParamField body="is_active" type="boolean">
+  Set to `false` to prevent new runs from being triggered. Defaults to `true`.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X PUT https://api-staging.knowledgestack.ai/v1/workflow-definitions/def-uuid-... \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Document Summarizer v2",
+    "runner_type": "SELF_HOSTED",
+    "runner_config": {"url": "https://runner.example.com/webhook", "webhook_secret": "secret"},
+    "source_path_part_ids": ["src-path-uuid-..."],
+    "instruction_path_part_ids": ["instr-path-uuid-..."],
+    "output_path_part_ids": ["out-path-uuid-..."],
+    "is_active": true
+  }'
+```
+
+**Response** — `WorkflowDefinitionResponse`
+
+---
+
+## Delete definition
+
+Permanently deletes a workflow definition. Existing run records are not deleted.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/workflow-definitions/{definition_id}
+```
+
+<ParamField path="definition_id" type="string" required>
+  UUID of the workflow definition to delete.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/workflow-definitions/def-uuid-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Invoke workflow
+
+Triggers a new run of a workflow definition. Returns a workflow run object.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/workflow-definitions/{definition_id}/invoke
+```
+
+<ParamField path="definition_id" type="string" required>
+  UUID of the workflow definition to invoke.
+</ParamField>
+
+<ParamField body="idempotency_key" type="string">
+  An optional string (up to 255 characters) that prevents duplicate runs. If you retry a request with the same key, the API returns the original run instead of creating a new one.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/workflow-definitions/def-uuid-.../invoke \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"idempotency_key": "run-2026-04-04-001"}'
+```
+
+**Response** — `WorkflowRunResponse`
+
+See [Workflow Runs](/api-reference/workflows/runs) for the full response field reference.
+
+---
+
+## List runs for definition
+
+Returns all runs associated with a specific workflow definition.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflow-definitions/{definition_id}/runs
+```
+
+<ParamField path="definition_id" type="string" required>
+  UUID of the workflow definition.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflow-definitions/def-uuid-.../runs \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[WorkflowRunResponse]`

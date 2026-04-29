@@ -1,0 +1,47 @@
+---
+title: "Auth Overview"
+description: "How to authenticate with the Knowledge Stack API using API keys or user sessions."
+---
+
+The Knowledge Stack API supports two authentication methods: **API keys** for machine-to-machine or server-side access, and **password / SSO** for interactive user sessions. Both methods produce a bearer token that you pass on every request.
+
+## Passing credentials
+
+Include your token in the `Authorization` header on every request:
+
+```http
+Authorization: Bearer <token>
+```
+
+There is no separate login step for API key usage — the key itself is the token. For user sessions, you obtain a token by signing in via [password auth](/api-reference/auth/password) or [SSO](/api-reference/auth/sso).
+
+## Token types
+
+| Type | When to use |
+|------|-------------|
+| **API key** | Server-side integrations, automation, and service accounts. API keys are long-lived and scoped to a tenant. Create and manage them via the `/v1/api-keys` endpoints. |
+| **UAT (user access token)** | Interactive sessions where a human user has signed in. UATs are short-lived and carry the user's tenant role and permissions. Refresh them with `POST /v1/auth/uat`. |
+
+<Note>
+  API keys are prefixed and can be rotated at any time without affecting other keys. Treat them as secrets — do not commit them to source control or expose them client-side.
+</Note>
+
+## Error responses
+
+| Status | Meaning |
+|--------|---------|
+| `401 Unauthorized` | The `Authorization` header is missing, malformed, or the token is expired or revoked. |
+| `403 Forbidden` | The token is valid but the caller does not have sufficient permissions for the requested resource or action. |
+
+A `401` response body looks like:
+
+```json
+{
+  "detail": "Could not validate credentials"
+}
+```
+
+## Next steps
+
+- [Password Auth](/api-reference/auth/password) — create accounts, sign in, and manage passwords
+- [SSO](/api-reference/auth/sso) — federated login via OAuth2 or enterprise IdPs

@@ -1,0 +1,281 @@
+---
+title: "Search"
+description: "Query your knowledge base with semantic vector search or keyword search, and navigate folder trees."
+---
+
+Knowledge Stack provides two complementary search mechanisms: **chunk search** for deep content retrieval from ingested documents, and **folder/item search** for browsing the folder hierarchy by name. Use them together to build powerful retrieval pipelines.
+
+---
+
+## Chunk search
+
+`POST /v1/chunks/search` performs semantic or keyword search across the chunks produced during ingestion. This is the primary interface for retrieval-augmented generation (RAG) and content discovery.
+
+### Basic query
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What are the data retention policies?",
+    "top_k": 10
+  }'
+```
+
+### Full request reference
+
+```json
+{
+  "query": "string (required)",
+  "search_type": "dense_only | full_text",
+  "parent_path_ids": ["<path-part-uuid>"],
+  "tag_ids": ["<tag-uuid>"],
+  "chunk_types": ["TEXT", "TABLE", "IMAGE", "HTML", "UNKNOWN"],
+  "ingestion_time_after": "2024-01-01T00:00:00Z",
+  "active_version_only": true,
+  "top_k": 5,
+  "score_threshold": 0.3,
+  "with_document": false
+}
+```
+
+**Fields**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `query` | string | — | The search query (required, min 1 character) |
+| `search_type` | string | `dense_only` | Search algorithm to use (see [Search types](#search-types)) |
+| `parent_path_ids` | UUID[] | tenant root | Limit search to specific folder paths (non-chunk path parts) |
+| `tag_ids` | UUID[] | — | Filter by tags. Chunks must have **all** specified tags (AND logic) |
+| `chunk_types` | string[] | — | Limit to specific chunk types (`TEXT`, `TABLE`, `IMAGE`, `HTML`, `UNKNOWN`) |
+| `ingestion_time_after` | datetime | — | Only return chunks ingested after this ISO 8601 timestamp |
+| `active_version_only` | boolean | `true` | When `true`, only return chunks from the active document version |
+| `top_k` | integer | `5` | Number of results to return (1–50) |
+| `score_threshold` | number | `0.3` | Minimum similarity score (0.0–1.0). Results below this are excluded |
+| `with_document` | boolean | `false` | When `true`, includes `document_id` and `document_version_id` in each result |
+
+### Search types
+
+| Value | Description |
+|---|---|
+| `dense_only` | Semantic vector search using dense embeddings. Best for conceptual queries and paraphrasing |
+| `full_text` | BM25 keyword search. Best for exact term matching, product names, and identifiers |
+
+<Tip>
+For most user-facing queries, `dense_only` (the default) gives the best results. Use `full_text` when your users search for specific codes, names, or technical terms that must match exactly.
+</Tip>
+
+### Search results
+
+The endpoint returns an array of `ScoredChunkResponse` objects ordered by relevance score:
+
+```json
+[
+  {
+    "score": 0.87,
+    "chunk_id": "c1d2e3f4-...",
+    "content": "Data is retained for 7 years in accordance with...",
+    "chunk_type": "TEXT",
+    "path_part_id": "a1b2c3d4-...",
+    "materialized_path": "/shared/compliance/policy-v2/section-3/chunk-12",
+    "document_id": "d1e2f3...",
+    "document_version_id": "v1a2b3..."
+  }
+]
+```
+
+<Note>
+`document_id` and `document_version_id` are only populated when you set `"with_document": true` in the request.
+</Note>
+
+---
+
+## Filtering by folder
+
+To restrict search to a specific folder (and all its contents), provide the folder's `path_part_id` in `parent_path_ids`:
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "annual revenue",
+    "parent_path_ids": ["<finance-folder-path-part-id>"],
+    "top_k": 5
+  }'
+```
+
+To search multiple folders simultaneously, include multiple IDs in the array. Results are pooled and ranked together.
+
+---
+
+## Filtering by tags
+
+Tags let you apply custom metadata to path parts and then filter search results by those tags:
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "service level agreement",
+    "tag_ids": ["<tag-uuid-1>", "<tag-uuid-2>"],
+    "top_k": 10
+  }'
+```
+
+All specified tags must be present on a chunk for it to appear in results (AND logic).
+
+---
+
+## Expanding context with neighbors
+
+Search results return individual chunks, which may be too short to provide full context. Use `GET /v1/chunks/{chunk_id}/neighbors` to retrieve the chunks immediately before and after a result in the original document structure.
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/chunks/<chunk-id>/neighbors" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+The response includes `before` and `after` arrays of `ChunkResponse` objects. This is useful for building a context window around a matched passage before sending it to an LLM.
+
+---
+
+## Subtree chunks via path
+
+To retrieve all chunks under a specific path node (a folder, document, or section), use `GET /v1/path-parts/{path_part_id}/subtree_chunks`. This returns a `SubtreeChunksResponse` grouping chunks by their shared path parts and tags.
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/path-parts/<path-part-id>/subtree_chunks" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "groups": [
+    {
+      "chunk_ids": ["c1...", "c2..."],
+      "path_part_ids": ["pp1...", "pp2..."],
+      "tag_ids": ["t1..."]
+    }
+  ]
+}
+```
+
+---
+
+## Folder and item search
+
+`GET /v1/folders/search` searches for folders and documents by **name** within your folder tree. It is useful for building browse-and-select UIs or locating a document when you know its name but not its ID.
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/folders/search?q=compliance&limit=20" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Query parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `q` | string | Name search term |
+| `parent_path_part_id` | UUID | Restrict search to a specific folder subtree |
+| `part_type` | string | Filter by `FOLDER` or `DOCUMENT` |
+| `limit` | integer | Results per page (default 20, max 100) |
+| `offset` | integer | Pagination offset |
+
+The response is a paginated list of `FolderResponse` and `DocumentResponse` objects depending on what matches.
+
+---
+
+## Realistic example: RAG pipeline
+
+The following shows a complete chunk retrieval flow you might use in a retrieval-augmented generation pipeline:
+
+<CodeGroup>
+
+```bash curl
+# 1. Search for relevant chunks
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is our refund policy for enterprise customers?",
+    "search_type": "dense_only",
+    "parent_path_ids": ["'$DOCS_FOLDER_PATH_PART_ID'"],
+    "top_k": 5,
+    "score_threshold": 0.4,
+    "with_document": true
+  }'
+
+# 2. Expand context around top result
+curl -X GET "https://api-staging.knowledgestack.ai/v1/chunks/$TOP_CHUNK_ID/neighbors" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+```python Python
+import requests
+
+API_KEY = "<your-api-key>"
+BASE_URL = "https://api-staging.knowledgestack.ai"
+HEADERS = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+
+# Search for relevant chunks
+search_resp = requests.post(
+    f"{BASE_URL}/v1/chunks/search",
+    headers=HEADERS,
+    json={
+        "query": "What is our refund policy for enterprise customers?",
+        "search_type": "dense_only",
+        "top_k": 5,
+        "score_threshold": 0.4,
+        "with_document": True,
+    },
+)
+results = search_resp.json()
+
+# Expand context around the top result
+top_chunk_id = results[0]["chunk_id"]
+neighbors_resp = requests.get(
+    f"{BASE_URL}/v1/chunks/{top_chunk_id}/neighbors",
+    headers=HEADERS,
+)
+context = neighbors_resp.json()
+```
+
+```javascript JavaScript
+const API_KEY = "<your-api-key>";
+const BASE_URL = "https://api-staging.knowledgestack.ai";
+const headers = {
+  Authorization: `Bearer ${API_KEY}`,
+  "Content-Type": "application/json",
+};
+
+// Search for relevant chunks
+const searchResp = await fetch(`${BASE_URL}/v1/chunks/search`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    query: "What is our refund policy for enterprise customers?",
+    search_type: "dense_only",
+    top_k: 5,
+    score_threshold: 0.4,
+    with_document: true,
+  }),
+});
+const results = await searchResp.json();
+
+// Expand context around the top result
+const topChunkId = results[0].chunk_id;
+const neighborsResp = await fetch(
+  `${BASE_URL}/v1/chunks/${topChunkId}/neighbors`,
+  { headers }
+);
+const context = await neighborsResp.json();
+```
+
+</CodeGroup>
+
+<Warning>
+`top_k` is capped at 50. For broader recall, consider running multiple searches with different `parent_path_ids` or adjusting `score_threshold` rather than raising `top_k`.
+</Warning>

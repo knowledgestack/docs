@@ -1,0 +1,159 @@
+---
+title: "Tenants"
+description: "Understand how tenants isolate workspaces, manage users and roles, and control branding in Knowledge Stack."
+---
+
+A **tenant** is an isolated workspace in Knowledge Stack. Every resource — folders, documents, users, groups, and API keys — belongs to exactly one tenant. Data never crosses tenant boundaries.
+
+---
+
+## What tenants contain
+
+When you work with the API, almost every request is implicitly scoped to your active tenant. The tenant controls:
+
+- **Content** — all folders, documents, and chunks
+- **Users** — who has access and at what role
+- **Groups** — logical collections of users for bulk permission management
+- **Settings** — display name, SSO configuration, and branding
+
+---
+
+## Multi-tenant access
+
+A single user account can belong to multiple tenants. Use `GET /v1/tenants` to list all tenants the authenticated user has access to, then select the one you want to operate against.
+
+```http
+GET https://api-staging.knowledgestack.ai/v1/tenants
+```
+
+```json
+{
+  "items": [
+    { "id": "ten_abc123", "name": "Acme Corp" },
+    { "id": "ten_xyz789", "name": "Acme Labs" }
+  ]
+}
+```
+
+---
+
+## Tenant settings
+
+You can update a tenant's display name and other settings with `PATCH /v1/tenants/{tenant_id}`:
+
+```http
+PATCH https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}
+Content-Type: application/json
+
+{
+  "name": "Acme Corp Knowledge Base"
+}
+```
+
+### SSO configuration
+
+Knowledge Stack supports single sign-on via external identity providers (`IdpType`). SSO settings are stored in the tenant's `IdpConfig` and control how users authenticate. Configure SSO through `PATCH /v1/tenants/{tenant_id}` or the directory sync endpoint `POST /v1/auth/sso/{tenant_id}/directory_sync`.
+
+---
+
+## Users and roles
+
+Every user in a tenant is assigned a `TenantUserRole` that governs their default level of access:
+
+| Role | Description |
+|---|---|
+| `admin` | Full control over the tenant — settings, users, and all content |
+| `member` | Standard access; content access is further controlled by permissions |
+
+List all users in a tenant with `GET /v1/tenants/{tenant_id}/users`:
+
+```http
+GET https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users
+```
+
+### Updating a user's role
+
+```http
+PATCH https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}
+Content-Type: application/json
+
+{
+  "role": "admin"
+}
+```
+
+### Activating and deactivating users
+
+You can suspend a user's access without removing them from the tenant:
+
+<CodeGroup>
+
+```http Deactivate
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}/deactivate
+```
+
+```http Activate
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}/activate
+```
+
+</CodeGroup>
+
+Deactivated users retain their role and permission assignments but cannot authenticate until reactivated.
+
+---
+
+## Inviting users
+
+To add a new user to your tenant, create an invite. Knowledge Stack sends an email to the recipient with a link to accept.
+
+<Steps>
+  <Step title="Create the invite">
+    ```http
+    POST https://api-staging.knowledgestack.ai/v1/invites
+    Content-Type: application/json
+
+    {
+      "email": "alice@example.com",
+      "role": "member"
+    }
+    ```
+
+    The response includes an `invite_id` and the invite's current `InviteStatus` (`pending`, `accepted`, or `expired`).
+  </Step>
+  <Step title="User accepts the invite">
+    The recipient clicks the link in the email, which calls:
+
+    ```http
+    POST https://api-staging.knowledgestack.ai/v1/invites/{invite_id}/accept
+    ```
+
+    After acceptance, the user is added to the tenant with the assigned role.
+  </Step>
+</Steps>
+
+You can list all pending invites with `GET /v1/invites`, and cancel an invite before it is accepted with `DELETE /v1/invites/{invite_id}`.
+
+<Note>
+  Invites expire after a set period. If a user does not accept in time, delete the old invite and create a new one.
+</Note>
+
+---
+
+## Branding
+
+You can upload a custom logo for your tenant to use in the Knowledge Stack UI. Logos are uploaded as multipart form data.
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/branding/logo
+Content-Type: multipart/form-data
+
+file=@company-logo.png
+```
+
+To remove the logo and revert to the default:
+
+```http
+DELETE https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/branding/logo
+```
+
+The response includes a `TenantBrandingResponse` with the URL of the stored logo.

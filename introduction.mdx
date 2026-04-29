@@ -1,0 +1,58 @@
+---
+title: "Introduction"
+description: "Knowledge Stack is a REST API for ingesting, organizing, and semantically searching documents across multi-tenant workspaces."
+---
+
+Knowledge Stack gives you a complete backend for knowledge management. You ingest documents, Knowledge Stack processes and chunks them, and you query that knowledge with semantic search or AI-powered conversations — all through a clean REST API.
+
+## What you can do
+
+<CardGroup cols={2}>
+  <Card title="Ingest documents" icon="file-arrow-up">
+    Upload files or raw content via `POST /v1/documents/ingest`. Knowledge Stack processes, chunks, and indexes them automatically. Ingesting a new version of an existing document is equally straightforward.
+  </Card>
+  <Card title="Semantic search" icon="magnifying-glass">
+    Run natural-language queries against your knowledge base with `POST /v1/chunks/search`. Results are ranked by semantic relevance, not just keyword overlap.
+  </Card>
+  <Card title="AI threads" icon="comments">
+    Create a thread and send user messages. Knowledge Stack retrieves relevant context from your documents and streams an AI-generated response — no RAG plumbing required on your end.
+  </Card>
+  <Card title="Multi-tenant workspaces" icon="building">
+    Every resource belongs to a tenant. You can create and manage multiple tenants, keeping each customer's knowledge completely isolated.
+  </Card>
+  <Card title="Permissions & groups" icon="lock">
+    Control who can read or write specific parts of your knowledge base using path-level permissions. Group users together and assign permissions to the group.
+  </Card>
+  <Card title="Custom workflows" icon="gears">
+    Define ingestion workflows and invoke them on demand. Monitor runs, inspect status, and rerun failed jobs through the Workflows API.
+  </Card>
+</CardGroup>
+
+## Base URL
+
+All API requests go to:
+
+```
+https://api-staging.knowledgestack.ai
+```
+
+All endpoints are versioned under `/v1`. A full request path looks like:
+
+```
+https://api-staging.knowledgestack.ai/v1/documents/ingest
+```
+
+## API version
+
+The current API version is **v1**. The version is part of every endpoint path, not a header.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Make your first API call in minutes — ingest a document, run a search, and start a conversation.
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn how to get an API key and authenticate your requests.
+  </Card>
+</CardGroup>

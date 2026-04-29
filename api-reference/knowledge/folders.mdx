@@ -1,0 +1,399 @@
+---
+title: "Folders"
+description: "Create and manage the folder hierarchy that organizes your documents."
+---
+
+Folders form the hierarchical namespace for all knowledge content. Every folder has a `path_part_id` — the underlying tree node — and a `parent_path_part_id` pointing to its parent folder. The root of each tenant's shared space is a system-managed folder.
+
+---
+
+## Create folder
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/folders`
+
+Create a new folder as a child of an existing folder.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Folder name. 1–255 characters.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)" required>
+  `path_part_id` of the parent folder. Must reference a `FOLDER` type path part.
+</ParamField>
+
+### Response `200`
+
+Returns a `FolderResponse`.
+
+<ResponseField name="id" type="string (uuid)">
+  Folder ID.
+</ResponseField>
+<ResponseField name="path_part_id" type="string (uuid)">
+  Underlying path part ID used for tree traversal and permissions.
+</ResponseField>
+<ResponseField name="name" type="string">
+  Folder name.
+</ResponseField>
+<ResponseField name="parent_path_part_id" type="string (uuid) | null">
+  Parent path part ID. `null` for the root folder.
+</ResponseField>
+<ResponseField name="materialized_path" type="string">
+  Full path from root (e.g. `/tenant-root/engineering/docs`).
+</ResponseField>
+<ResponseField name="system_managed" type="boolean">
+  Whether this folder is managed by the system and cannot be deleted directly.
+</ResponseField>
+<ResponseField name="tenant_id" type="string (uuid)">
+  Tenant that owns this folder.
+</ResponseField>
+<ResponseField name="created_at" type="string (datetime)">
+  Creation timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="updated_at" type="string (datetime)">
+  Last update timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="tags" type="TagResponse[] | null">
+  Tags attached to this folder (if requested).
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/folders \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Engineering Docs",
+    "parent_path_part_id": "a1b2c3d4-0000-0000-0000-000000000000"
+  }'
+```
+
+---
+
+## List folders
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/folders`
+
+List direct child folders of a parent folder (depth = 1).
+
+### Query parameters
+
+<ParamField query="parent_path_part_id" type="string (uuid)">
+  Filter to children of this folder. Defaults to the tenant's shared root.
+</ParamField>
+
+<ParamField query="sort_order" type="string">
+  Sort order. One of `NAME`, `UPDATED_AT`, `CREATED_AT`.
+</ParamField>
+
+<ParamField query="with_tags" type="boolean">
+  Include tag data in each folder response. Defaults to `false`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated list of `FolderResponse` objects.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/folders?parent_path_part_id=<folder-path-part-id>&limit=20" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Search items
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/folders/search`
+
+Search for folders and documents by name using a case-insensitive trigram partial match.
+
+### Query parameters
+
+<ParamField query="name_like" type="string">
+  Partial name to search for.
+</ParamField>
+
+<ParamField query="part_type" type="string">
+  Filter by item type. One of `FOLDER`, `DOCUMENT`.
+</ParamField>
+
+<ParamField query="parent_path_part_id" type="string (uuid)">
+  Restrict search to descendants of this folder.
+</ParamField>
+
+<ParamField query="sort_order" type="string">
+  Sort order. One of `NAME`, `UPDATED_AT`, `CREATED_AT`.
+</ParamField>
+
+<ParamField query="with_tags" type="boolean">
+  Include tags in results. Defaults to `false`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated discriminated union of `FolderResponse` and `DocumentResponse` objects.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/folders/search?name_like=eng&part_type=FOLDER" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get folder
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/folders/{folder_id}`
+
+Get a single folder by its folder ID.
+
+### Path parameters
+
+<ParamField path="folder_id" type="string (uuid)" required>
+  The folder ID (not the `path_part_id`).
+</ParamField>
+
+### Query parameters
+
+<ParamField query="with_tags" type="boolean">
+  Include tags in the response. Defaults to `false`.
+</ParamField>
+
+### Response `200`
+
+Returns a `FolderResponse`. See [Create folder](#create-folder) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/folders/<folder-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Update folder
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/folders/{folder_id}`
+
+Rename a folder, move it to a new parent, or both. All fields are optional — supply only the ones you want to change.
+
+### Path parameters
+
+<ParamField path="folder_id" type="string (uuid)" required>
+  The folder ID to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string">
+  New folder name. 1–255 characters.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)">
+  `path_part_id` of the new parent folder. Provide this to move the folder.
+</ParamField>
+
+### Response `200`
+
+Returns the updated `FolderResponse`.
+
+### Example
+
+```bash
+# Rename
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/folders/<folder-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Platform Docs"}'
+
+# Move
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/folders/<folder-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"parent_path_part_id": "<new-parent-path-part-id>"}'
+```
+
+---
+
+## Delete folder
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/folders/{folder_id}`
+
+Delete a folder and all of its contents.
+
+<Note>
+  This is a cascading delete. All child folders, documents, document versions, sections, and chunks inside this folder will be permanently removed. This action cannot be undone.
+</Note>
+
+### Path parameters
+
+<ParamField path="folder_id" type="string (uuid)" required>
+  The folder ID to delete.
+</ParamField>
+
+### Response `200`
+
+Returns an empty `{}` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/folders/<folder-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Folder action
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/folders/{folder_id}`
+
+Perform an action on a folder. Currently the only supported action is `reembed`, which re-embeds all documents in the folder.
+
+### Path parameters
+
+<ParamField path="folder_id" type="string (uuid)" required>
+  The folder to act on.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="action" type="string" required>
+  The action to perform. Currently supported: `reembed`.
+</ParamField>
+
+### Response `200`
+
+Returns a `FolderActionResponse`.
+
+<ResponseField name="folder_id" type="string (uuid)">
+  The folder ID the action was applied to.
+</ResponseField>
+<ResponseField name="action" type="string">
+  The action performed (e.g. `reembed`).
+</ResponseField>
+<ResponseField name="workflow_id" type="string">
+  ID of the background workflow that was triggered.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/folders/<folder-id>?action=reembed" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "folder_id": "a1b2c3d4-0000-0000-0000-000000000000",
+  "action": "reembed",
+  "workflow_id": "reembed-workflow-abc123"
+}
+```
+
+---
+
+## List folder contents
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/folders/{folder_id}/contents`
+
+List all items (folders and documents) under a folder up to a specified depth. Returns a paginated discriminated union — each item includes a `part_type` field (`FOLDER` or `DOCUMENT`) so you can distinguish between them.
+
+### Path parameters
+
+<ParamField path="folder_id" type="string (uuid)" required>
+  The folder whose contents to list.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="max_depth" type="integer">
+  Maximum depth to traverse below the specified folder. `1` returns only direct children.
+</ParamField>
+
+<ParamField query="sort_order" type="string">
+  Sort order. One of `NAME`, `UPDATED_AT`, `CREATED_AT`.
+</ParamField>
+
+<ParamField query="with_tags" type="boolean">
+  Include tag data in each item. Defaults to `false`.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated list. Each item is either a `FolderResponse` or `DocumentResponse`, discriminated by the `part_type` field.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/folders/<folder-id>/contents?max_depth=2&limit=50" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "items": [
+    {
+      "part_type": "FOLDER",
+      "id": "...",
+      "name": "Subfolder A",
+      ...
+    },
+    {
+      "part_type": "DOCUMENT",
+      "id": "...",
+      "name": "Architecture Overview.pdf",
+      ...
+    }
+  ],
+  "total": 2,
+  "limit": 50,
+  "offset": 0
+}
+```

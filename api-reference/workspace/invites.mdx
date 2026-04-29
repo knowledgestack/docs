@@ -1,0 +1,176 @@
+---
+title: "Invites"
+description: "Invite users to join a tenant by email."
+---
+
+Invites let you onboard new users to your tenant. When you create an invite, Knowledge Stack sends the recipient an email containing an invite link. The recipient must already have (or create) a Knowledge Stack account before they can accept.
+
+## Create invite
+
+Sends an email invitation to the specified address and creates a pending invite record.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/invites
+```
+
+<ParamField body="tenant_id" type="string" required>
+  UUID of the tenant to invite the user to.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Email address of the person to invite.
+</ParamField>
+
+<ParamField body="role" type="string">
+  Role to assign when the invite is accepted. One of `USER`, `ADMIN`, `OWNER`. Defaults to `USER`.
+</ParamField>
+
+<Note>
+  Invitations expire after a set period. If a user hasn't accepted by the expiry date, you'll need to create a new invite.
+</Note>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/invites \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "a1b2c3d4-...",
+    "email": "ada@example.com",
+    "role": "USER"
+  }'
+```
+
+**Response** — `InviteResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the invite.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address the invite was sent to.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  Role the user will receive on acceptance. One of `USER`, `ADMIN`, `OWNER`.
+</ResponseField>
+
+<ResponseField name="invite_link" type="string">
+  The URL included in the invitation email. You can share this directly if needed.
+</ResponseField>
+
+<ResponseField name="expires_at" type="string">
+  ISO 8601 timestamp when the invite expires.
+</ResponseField>
+
+<ResponseField name="accepted_at" type="string | null">
+  ISO 8601 timestamp when the invite was accepted. `null` if still pending.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the invite was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last status change.
+</ResponseField>
+
+---
+
+## List invites
+
+Returns all invites for the current tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/invites
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/invites \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[InviteResponse]`
+
+**InviteStatus values**
+
+| Value      | Description                                          |
+|------------|------------------------------------------------------|
+| `pending`  | The invite has been sent but not yet accepted.       |
+| `accepted` | The user accepted the invite and joined the tenant.  |
+| `expired`  | The invite passed its expiry date without being accepted. |
+
+---
+
+## Accept invite
+
+Accepts a pending invite, adding the authenticated user to the tenant with the role specified in the invite.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/invites/{invite_id}/accept
+```
+
+<ParamField path="invite_id" type="string" required>
+  UUID of the invite to accept.
+</ParamField>
+
+<Note>
+  The authenticated user must be the same person the invite was sent to. You cannot accept an invite on behalf of another user.
+</Note>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/invites/i1i2i3i4-.../accept \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `AcceptInviteResponse`
+
+<ResponseField name="tenant_id" type="string">
+  UUID of the tenant the user has now joined.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  The role assigned to the user. One of `USER`, `ADMIN`, `OWNER`.
+</ResponseField>
+
+---
+
+## Delete invite
+
+Revokes a pending invite. The invite link in the email immediately becomes invalid.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/invites/{invite_id}
+```
+
+<ParamField path="invite_id" type="string" required>
+  UUID of the invite to revoke.
+</ParamField>
+
+<Warning>
+  Once deleted, the invite cannot be recovered. The recipient will need a new invite to join the tenant.
+</Warning>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/invites/i1i2i3i4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```

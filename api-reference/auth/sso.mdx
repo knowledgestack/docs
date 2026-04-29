@@ -1,0 +1,227 @@
+---
+title: "SSO"
+description: "Federated authentication via OAuth2 and enterprise identity providers."
+---
+
+SSO (Single Sign-On) lets users authenticate through an external identity provider (IdP) configured for their tenant. Each tenant has its own IdP configuration — you cannot use SSO endpoints without a tenant that has SSO enabled.
+
+## Supported IdPs
+
+The `SupportedIdP` enum lists the IdPs you can configure at the tenant level:
+
+| Value | Description |
+|-------|-------------|
+| `OAUTH2` | Standard OAuth2 / OpenID Connect provider (e.g. Google) |
+| `FANWEI_E9` | FanWei E9 enterprise IdP with directory sync |
+
+The `IdpType` used in query parameters covers the full set of provider identifiers: `PASSWORD`, `GOOGLE`, `TENANT`.
+
+<Note>
+  SSO configuration is managed at the tenant level by tenant owners or admins. These endpoints handle the runtime authentication flow, not IdP configuration.
+</Note>
+
+---
+
+## Initiate SSO
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/auth/sso/initiate`
+
+Start an SSO flow for a given provider and optional tenant. Returns a `redirect_url` that you should direct the user to in order to complete authentication with the IdP.
+
+### Query parameters
+
+<ParamField query="provider" type="string" required>
+  The IdP to initiate SSO with. One of the `IdpType` values (e.g. `GOOGLE`).
+</ParamField>
+
+<ParamField query="tenant_id" type="string (uuid)">
+  The tenant to authenticate against. Required for tenant-specific IdPs.
+</ParamField>
+
+### Response `200`
+
+<ResponseField name="redirect_url" type="string">
+  The URL to redirect the user to in order to complete the SSO flow with the IdP.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/auth/sso/initiate?provider=GOOGLE&tenant_id=<tenant-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "redirect_url": "https://accounts.google.com/o/oauth2/auth?client_id=..."
+}
+```
+
+---
+
+## SSO login redirect handler
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/auth/sso/{tenant_id}/signin`
+
+Entry-point redirect handler for tenant-specific SSO login. Resolves the tenant's configured IdP and dispatches the browser to the appropriate provider. Sets the `ks_uat` cookie and redirects to the frontend on completion.
+
+This endpoint is typically called by the frontend — it is not a JSON API endpoint. The browser follows the redirect chain through the IdP and back.
+
+### Path parameters
+
+<ParamField path="tenant_id" type="string (uuid)" required>
+  The tenant whose IdP configuration to use.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="redirect" type="string">
+  Post-login redirect path within the application. Defaults to `""` (root).
+</ParamField>
+
+### Response `307`
+
+Temporary redirect to the IdP's authorization endpoint.
+
+### Example
+
+```bash
+# Typically opened in a browser, not called with curl
+curl -v "https://api-staging.knowledgestack.ai/v1/auth/sso/<tenant-id>/signin?redirect=/dashboard"
+```
+
+---
+
+## OAuth2 callback
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/auth/sso/oauth2/callback`
+
+OAuth2 callback handler. The IdP redirects the user here after authorization. This endpoint exchanges the authorization code for user details, sets the `ks_uat` cookie, and returns the authenticated user.
+
+You do not call this endpoint directly — the IdP calls it as part of the OAuth2 authorization code flow.
+
+### Query parameters
+
+<ParamField query="provider" type="string" required>
+  The IdP that issued the callback. Must match the `IdpType` used to initiate the flow.
+</ParamField>
+
+<ParamField query="code" type="string">
+  Authorization code returned by the IdP.
+</ParamField>
+
+<ParamField query="state" type="string">
+  State parameter for CSRF protection, returned by the IdP.
+</ParamField>
+
+<ParamField query="error" type="string">
+  Error code if the IdP denied authorization.
+</ParamField>
+
+<ParamField query="error_description" type="string">
+  Human-readable error description from the IdP.
+</ParamField>
+
+<ParamField query="tenant_id" type="string (uuid)">
+  Tenant ID to scope the session to.
+</ParamField>
+
+### Response `200`
+
+Returns a `UserResponse` on successful authentication.
+
+<ResponseField name="id" type="string (uuid)">
+  User ID.
+</ResponseField>
+<ResponseField name="email" type="string">
+  User's email address.
+</ResponseField>
+<ResponseField name="first_name" type="string">
+  First name.
+</ResponseField>
+<ResponseField name="last_name" type="string">
+  Last name.
+</ResponseField>
+<ResponseField name="idp_type" type="string">
+  Identity provider type. One of `PASSWORD`, `GOOGLE`, `TENANT`.
+</ResponseField>
+<ResponseField name="current_tenant_id" type="string (uuid)">
+  The tenant the user is currently scoped to.
+</ResponseField>
+<ResponseField name="current_tenant_role" type="string">
+  The user's role in the current tenant.
+</ResponseField>
+<ResponseField name="default_tenant_id" type="string (uuid)">
+  The user's default tenant.
+</ResponseField>
+
+---
+
+## Directory sync
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/auth/sso/{tenant_id}/directory_sync`
+
+Trigger a directory synchronization for a FanWei E9 tenant. Syncs users from the enterprise IdP into Knowledge Stack — creating, updating, activating, or deactivating accounts to match the IdP's directory.
+
+<Note>
+  This endpoint requires either a tenant OWNER/ADMIN UAT or an admin API key. It is specific to tenants configured with the `FANWEI_E9` IdP.
+</Note>
+
+### Path parameters
+
+<ParamField path="tenant_id" type="string (uuid)" required>
+  The tenant to synchronize.
+</ParamField>
+
+### Response `200`
+
+Returns a `DirectorySyncResponse` summarizing the sync operation.
+
+<ResponseField name="users_created" type="integer">
+  Number of new user accounts created.
+</ResponseField>
+<ResponseField name="users_updated" type="integer">
+  Number of existing accounts updated.
+</ResponseField>
+<ResponseField name="users_activated" type="integer">
+  Number of previously deactivated accounts reactivated.
+</ResponseField>
+<ResponseField name="users_deactivated" type="integer">
+  Number of accounts deactivated because they were removed from the IdP.
+</ResponseField>
+<ResponseField name="users_skipped" type="integer">
+  Number of directory entries skipped (e.g. already up to date).
+</ResponseField>
+<ResponseField name="warnings" type="string[]">
+  Non-fatal warnings encountered during sync.
+</ResponseField>
+<ResponseField name="errors" type="string[]">
+  Errors encountered during sync (entries that failed to process).
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/auth/sso/<tenant-id>/directory_sync \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "users_created": 5,
+  "users_updated": 12,
+  "users_activated": 1,
+  "users_deactivated": 2,
+  "users_skipped": 30,
+  "warnings": [],
+  "errors": []
+}
+```

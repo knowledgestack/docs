@@ -1,0 +1,287 @@
+---
+title: "Sections"
+description: "Organize document version content into logical named subdivisions."
+---
+
+Sections are named tree nodes that group chunks within a document version. They reflect the logical structure of a document — chapters, headings, topics — and can be nested. Each section has a parent (`DOCUMENT_VERSION` or another `SECTION`) and is ordered within its siblings via a linked-list structure (`prev_sibling_path_id`, `next_sibling_path_id`).
+
+---
+
+## Create section
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/sections`
+
+Create a new section as a child of a document version or an existing section.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Section name. 1–255 characters. Can contain any characters.
+</ParamField>
+
+<ParamField body="parent_path_id" type="string (uuid)" required>
+  `path_part_id` of the parent. Must be a `DOCUMENT_VERSION` or `SECTION` type path part.
+</ParamField>
+
+<ParamField body="page_number" type="integer">
+  The page in the source document where this section begins. Must be > 0.
+</ParamField>
+
+<ParamField body="prev_sibling_path_id" type="string (uuid)">
+  Insert this section after the specified sibling `path_part_id`. If `null` or omitted, the section is appended to the end of the sibling list.
+</ParamField>
+
+### Response `200`
+
+Returns a `SectionResponse`.
+
+<ResponseField name="id" type="string (uuid)">
+  Section ID.
+</ResponseField>
+<ResponseField name="path_part_id" type="string (uuid)">
+  Underlying path part ID.
+</ResponseField>
+<ResponseField name="name" type="string">
+  Section name.
+</ResponseField>
+<ResponseField name="page_number" type="integer | null">
+  Source document page number.
+</ResponseField>
+<ResponseField name="parent_path_id" type="string (uuid)">
+  Parent path part ID.
+</ResponseField>
+<ResponseField name="prev_sibling_path_id" type="string (uuid) | null">
+  Previous sibling path part ID in the ordered list.
+</ResponseField>
+<ResponseField name="next_sibling_path_id" type="string (uuid) | null">
+  Next sibling path part ID in the ordered list.
+</ResponseField>
+<ResponseField name="materialized_path" type="string">
+  Full path from root.
+</ResponseField>
+<ResponseField name="system_managed" type="boolean">
+  Whether this section is system-managed.
+</ResponseField>
+<ResponseField name="system_metadata" type="SectionSystemMetadata">
+  System-managed metadata, including aggregate statistics (`information_statistics`).
+</ResponseField>
+<ResponseField name="tenant_id" type="string (uuid)">
+  Owning tenant.
+</ResponseField>
+<ResponseField name="created_at" type="string (datetime)">
+  Creation timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="updated_at" type="string (datetime)">
+  Last update timestamp (ISO 8601).
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/sections \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Introduction",
+    "parent_path_id": "<document-version-path-part-id>",
+    "page_number": 1
+  }'
+```
+
+---
+
+## Get sections (bulk)
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/sections/bulk`
+
+Fetch multiple sections by ID in a single request.
+
+<Note>
+  Non-existent IDs are silently skipped. The maximum number of IDs per request is 200.
+</Note>
+
+### Query parameters
+
+<ParamField query="section_ids" type="string[]" required>
+  Comma-separated list of section IDs to retrieve.
+</ParamField>
+
+### Response `200`
+
+Returns an array of `SectionResponse` objects. See [Create section](#create-section) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/sections/bulk?section_ids=<id-1>,<id-2>,<id-3>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get section
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/sections/{section_id}`
+
+Get a single section by its ID.
+
+### Path parameters
+
+<ParamField path="section_id" type="string (uuid)" required>
+  The section ID.
+</ParamField>
+
+### Response `200`
+
+Returns a `SectionResponse`. See [Create section](#create-section) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/sections/<section-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Update section
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/sections/{section_id}`
+
+Update a section's name, page number, or position within its siblings. All fields are optional.
+
+To reorder: provide `prev_sibling_path_id` to insert after a specific sibling, or set `move_to_head: true` to move to the front of the sibling list. Do not provide both.
+
+### Path parameters
+
+<ParamField path="section_id" type="string (uuid)" required>
+  The section ID to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="name" type="string">
+  New section name. 1–255 characters.
+</ParamField>
+
+<ParamField body="page_number" type="integer">
+  Updated page number. Must be > 0.
+</ParamField>
+
+<ParamField body="prev_sibling_path_id" type="string (uuid)">
+  Move after this sibling path part ID.
+</ParamField>
+
+<ParamField body="move_to_head" type="boolean">
+  Set to `true` to move this section to the beginning of the sibling list. Defaults to `false`.
+</ParamField>
+
+<ParamField body="parent_path_part_id" type="string (uuid)">
+  Reparent to a new parent path part. Must be a `DOCUMENT_VERSION` or `SECTION` within the same document version.
+</ParamField>
+
+### Response `200`
+
+Returns the updated `SectionResponse`.
+
+### Example
+
+```bash
+# Rename
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/sections/<section-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Overview"}'
+
+# Move to head of sibling list
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/sections/<section-id> \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"move_to_head": true}'
+```
+
+---
+
+## Delete section
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/sections/{section_id}`
+
+Delete a section and all of its child sections and chunks.
+
+<Note>
+  This is a cascading delete. All nested sections and their chunks are permanently removed.
+</Note>
+
+### Path parameters
+
+<ParamField path="section_id" type="string (uuid)" required>
+  The section ID to delete.
+</ParamField>
+
+### Response `200`
+
+Returns an empty `{}` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/sections/<section-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Dissolve section
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/sections/{section_id}/dissolve`
+
+Dissolve a section by converting it to a `TEXT` chunk and reparenting its children. Specifically:
+
+1. The section's name becomes the content of a new `TEXT` chunk at the section's position.
+2. All children of the section are reparented to the section's parent.
+3. The section itself is deleted.
+
+This is useful when you want to flatten a section into its parent without losing the heading text or the child content.
+
+### Path parameters
+
+<ParamField path="section_id" type="string (uuid)" required>
+  The section to dissolve.
+</ParamField>
+
+### Response `200`
+
+Returns a `DissolveSectionResponse`.
+
+<ResponseField name="text_chunk_id" type="string (uuid)">
+  ID of the newly created `TEXT` chunk containing the section's name.
+</ResponseField>
+<ResponseField name="reparented_children" type="integer">
+  Number of children that were reparented to the section's former parent.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/sections/<section-id>/dissolve \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "text_chunk_id": "c3d4e5f6-0000-0000-0000-000000000003",
+  "reparented_children": 5
+}
+```

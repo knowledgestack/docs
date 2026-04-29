@@ -1,0 +1,453 @@
+---
+title: "Tenants"
+description: "Manage tenants, their members, roles, and branding."
+---
+
+A tenant is the top-level organizational unit in Knowledge Stack. Every resource — folders, documents, groups, and users — belongs to a tenant.
+
+## List tenants
+
+Returns all tenants that the authenticated user belongs to.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenants
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed). Defaults to `1`.
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page. Defaults to `20`.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenants \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[TenantResponse]`
+
+```json
+{
+  "items": [
+    {
+      "id": "a1b2c3d4-...",
+      "name": "Acme Corp",
+      "settings": {
+        "language": "en",
+        "description": "Acme Corp tenant",
+        "timezone": "America/New_York"
+      },
+      "branding": {
+        "brand_name": "Acme",
+        "brand_color": "#2563eb",
+        "logo_url": "https://...",
+        "logo_dark_url": null,
+        "favicon_url": null,
+        "theme_overrides": null
+      }
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+---
+
+## Get tenant
+
+Returns details for a single tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `TenantResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the tenant.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name of the tenant.
+</ResponseField>
+
+<ResponseField name="settings" type="object">
+  User-configurable settings for the tenant.
+
+  <Expandable title="TenantSettingsResponse fields">
+    <ResponseField name="language" type="string">
+      Preferred language. One of `en`, `zh`.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Tenant description.
+    </ResponseField>
+    <ResponseField name="timezone" type="string">
+      IANA timezone string (e.g. `America/New_York`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="branding" type="object">
+  Tenant branding configuration including logo URLs.
+
+  <Expandable title="TenantBrandingResponse fields">
+    <ResponseField name="brand_name" type="string | null">
+      Custom brand name displayed in the UI.
+    </ResponseField>
+    <ResponseField name="brand_color" type="string | null">
+      Primary brand hex color (e.g. `#2563eb`).
+    </ResponseField>
+    <ResponseField name="logo_url" type="string | null">
+      URL of the primary logo.
+    </ResponseField>
+    <ResponseField name="logo_dark_url" type="string | null">
+      URL of the dark-mode logo.
+    </ResponseField>
+    <ResponseField name="favicon_url" type="string | null">
+      URL of the favicon.
+    </ResponseField>
+    <ResponseField name="theme_overrides" type="object | null">
+      Map of custom CSS variable overrides.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Update tenant
+
+Partially updates a tenant's name or settings. All fields are optional — omit fields you don't want to change.
+
+```bash
+PATCH https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField body="name" type="string">
+  New display name for the tenant.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Tenant settings to update. All sub-fields are optional.
+
+  <Expandable title="TenantSettingsUpdate fields">
+    <ParamField body="language" type="string">
+      Preferred language. One of `en`, `zh`.
+    </ParamField>
+    <ParamField body="description" type="string">
+      Tenant description.
+    </ParamField>
+    <ParamField body="timezone" type="string">
+      IANA timezone string.
+    </ParamField>
+    <ParamField body="brand_name" type="string">
+      Custom brand name.
+    </ParamField>
+    <ParamField body="brand_color" type="string">
+      Primary brand hex color (e.g. `#2563eb`).
+    </ParamField>
+    <ParamField body="theme_overrides" type="object">
+      Map of CSS variable overrides.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Example**
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-... \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Corp (Updated)", "settings": {"timezone": "Europe/London"}}'
+```
+
+**Response** — `TenantResponse`
+
+---
+
+## Delete tenant
+
+Permanently deletes a tenant and all associated resources.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<Warning>
+  This action is irreversible. All tenant data — including documents, folders, users, and groups — is permanently deleted.
+</Warning>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## List tenant users
+
+Returns all users belonging to the specified tenant.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-.../users \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[TenantUserResponse]`
+
+<ResponseField name="user_id" type="string">
+  UUID of the user.
+</ResponseField>
+
+<ResponseField name="email" type="string | null">
+  User's email address.
+</ResponseField>
+
+<ResponseField name="first_name" type="string | null">
+  User's first name.
+</ResponseField>
+
+<ResponseField name="last_name" type="string | null">
+  User's last name.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  The user's role within this tenant. One of `USER`, `ADMIN`, `OWNER`.
+</ResponseField>
+
+<ResponseField name="is_tenant_idp_managed" type="boolean">
+  Whether the user's account is managed by the tenant's identity provider.
+</ResponseField>
+
+<ResponseField name="deactivated_on" type="string | null">
+  ISO 8601 timestamp when the user was deactivated. `null` means the user is active.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the user joined the tenant.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last update to this membership record.
+</ResponseField>
+
+---
+
+## Activate user
+
+Re-activates a previously deactivated user, restoring their access to the tenant.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}/activate
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField path="user_id" type="string" required>
+  UUID of the user to activate.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-.../users/u1u2u3u4-.../activate \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Deactivate user
+
+Deactivates a user, preventing them from accessing the tenant without permanently removing them.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}/deactivate
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField path="user_id" type="string" required>
+  UUID of the user to deactivate.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-.../users/u1u2u3u4-.../deactivate \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Remove user from tenant
+
+Permanently removes a user from the tenant. The user's account is not deleted, but they lose all access to this tenant.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField path="user_id" type="string" required>
+  UUID of the user to remove.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-.../users/u1u2u3u4-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Update user role
+
+Changes a user's role within the tenant.
+
+```bash
+PATCH https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/users/{user_id}
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField path="user_id" type="string" required>
+  UUID of the user whose role you want to update.
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  New role for the user. One of `USER`, `ADMIN`, `OWNER`.
+</ParamField>
+
+**TenantUserRole values**
+
+| Value   | Description                                    |
+|---------|------------------------------------------------|
+| `USER`  | Standard member. Access is governed by permissions. |
+| `ADMIN` | Can manage users, groups, and tenant settings. |
+| `OWNER` | Full control, including deleting the tenant.   |
+
+**Example**
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-.../users/u1u2u3u4-... \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"role": "ADMIN"}'
+```
+
+---
+
+## Upload tenant logo
+
+Uploads a logo image for the tenant. Use the `logo_type` field to specify whether you're uploading the primary logo, a dark-mode logo, or the favicon.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/branding/logo
+```
+
+<Note>
+  This endpoint accepts `multipart/form-data`. Do not set `Content-Type` manually — your HTTP client will set the correct boundary automatically.
+</Note>
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField body="file" type="file" required>
+  The image file to upload (PNG, JPEG, SVG, or ICO).
+</ParamField>
+
+<ParamField body="logo_type" type="string" required>
+  Which logo slot to populate. One of:
+  - `logo` — primary light-mode logo
+  - `logo_dark` — dark-mode logo variant
+  - `favicon` — browser tab icon
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-.../branding/logo \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/logo.png" \
+  -F "logo_type=logo"
+```
+
+---
+
+## Delete tenant logo
+
+Removes a previously uploaded logo from the tenant's branding configuration.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/tenants/{tenant_id}/branding/logo
+```
+
+<ParamField path="tenant_id" type="string" required>
+  UUID of the tenant.
+</ParamField>
+
+<ParamField query="logo_type" type="string" required>
+  Which logo to delete. One of `logo`, `logo_dark`, `favicon`.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE "https://api-staging.knowledgestack.ai/v1/tenants/a1b2c3d4-e5f6-.../branding/logo?logo_type=logo" \
+  -H "Authorization: Bearer <your-api-key>"
+```

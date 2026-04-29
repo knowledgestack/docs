@@ -1,0 +1,166 @@
+---
+title: "Authentication"
+description: "Authenticate requests to the Knowledge Stack API using API keys, password sign-in, or SSO."
+---
+
+Every request to the Knowledge Stack API must include a valid token in the `Authorization` header:
+
+```
+Authorization: Bearer <your-token>
+```
+
+There are three ways to get a token: API keys, password sign-in, and SSO.
+
+## API keys
+
+API keys are the recommended method for server-to-server integrations. They don't expire unless you delete them.
+
+### Create an API key
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/api-keys \
+  -H "Authorization: Bearer <your-existing-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-service-key"
+  }'
+```
+
+The response includes the key value. **Store it immediately** — the full key is only returned once.
+
+```json
+{
+  "id": "key_01j...",
+  "name": "my-service-key",
+  "key": "ks_live_...",
+  "created_at": "2025-01-15T10:00:00Z"
+}
+```
+
+### Use an API key
+
+Pass the key as a Bearer token on every request:
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/documents \
+  -H "Authorization: Bearer ks_live_..."
+```
+
+### Manage your keys
+
+List all API keys:
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/api-keys \
+  -H "Authorization: Bearer <your-token>"
+```
+
+Delete a key when it's no longer needed:
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/api-keys/<api_key_id> \
+  -H "Authorization: Bearer <your-token>"
+```
+
+<Warning>
+Deleting an API key immediately invalidates it. Any service using that key will start receiving `401` errors.
+</Warning>
+
+---
+
+## Password sign-in
+
+If your users authenticate directly against Knowledge Stack, use the password sign-in flow. It returns a user access token (UAT) you pass as the Bearer token.
+
+### Sign in
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/auth/pw/signin \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "your-password"
+  }'
+```
+
+A successful response returns a UAT:
+
+```json
+{
+  "access_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+### Use the UAT
+
+Pass it the same way as an API key:
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/users/me \
+  -H "Authorization: Bearer eyJ..."
+```
+
+### Refresh the token
+
+UATs expire. Refresh before making requests if you're storing tokens across sessions:
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/auth/uat \
+  -H "Authorization: Bearer <current-token>"
+```
+
+The response returns a new access token with a fresh expiry.
+
+### Sign out
+
+Invalidate the current token:
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/auth/signout \
+  -H "Authorization: Bearer <your-token>"
+```
+
+---
+
+## SSO
+
+For tenants configured with a third-party identity provider, use the SSO flow. This is a redirect-based flow — it's not suitable for direct API access from a server.
+
+### Initiate SSO
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/auth/sso/initiate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_id": "tenant_01j...",
+    "redirect_uri": "https://your-app.com/auth/callback"
+  }'
+```
+
+The response returns a redirect URL:
+
+```json
+{
+  "redirect_url": "https://your-idp.com/authorize?..."
+}
+```
+
+Redirect your user to that URL. After the user authenticates with the identity provider, they are redirected back to your `redirect_uri` with a token you can use for subsequent API calls.
+
+<Note>
+SSO requires your tenant to have an identity provider configured. Contact your account administrator to set up SSO for your tenant.
+</Note>
+
+---
+
+## Common errors
+
+| Status | Meaning | Fix |
+|--------|---------|-----|
+| `401 Unauthorized` | Token is missing, malformed, or expired | Verify the `Authorization` header is formatted as `Bearer <token>`. Refresh or re-issue the token if expired. |
+| `403 Forbidden` | Token is valid but lacks permission for the requested resource | Check the permissions assigned to the user or API key. A user may be authenticated but not authorized to access a specific path. |
+
+<Tip>
+When debugging auth errors, try calling `GET /v1/users/me` first. A `200` response confirms your token is valid. A `401` means the token itself is the problem.
+</Tip>

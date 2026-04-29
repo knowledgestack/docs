@@ -1,0 +1,261 @@
+---
+title: "Semantic Search"
+description: "Search your knowledge base using dense vector similarity or BM25 full-text matching."
+---
+
+Use `POST /v1/chunks/search` to query chunks in your knowledge base. The API searches using either dense vector (semantic) similarity or BM25 keyword matching, combines results with path-based authorization, and hydrates the matches from the database before returning them.
+
+## POST /v1/chunks/search
+
+```
+POST https://api-staging.knowledgestack.ai/v1/chunks/search
+```
+
+### Request body
+
+<ParamField body="query" type="string" required>
+  Natural language search query. Must be at least 1 character.
+</ParamField>
+
+<ParamField body="search_type" type="string">
+  The search algorithm to use. See [SearchType](#searchtype) for values. Defaults to `dense_only`.
+</ParamField>
+
+<ParamField body="top_k" type="integer">
+  Maximum number of results to return. Must be between 1 and 50. Defaults to `5`.
+</ParamField>
+
+<ParamField body="score_threshold" type="number">
+  Minimum similarity score a chunk must achieve to be included in results. Defaults to `0.3`. Raise this to get higher-confidence matches only.
+</ParamField>
+
+<ParamField body="parent_path_ids" type="array">
+  Array of path part UUIDs (non-CHUNK types) to restrict the search to. When omitted, the search defaults to your tenant's `/shared` folder.
+</ParamField>
+
+<ParamField body="tag_ids" type="array">
+  Filter results to chunks that have **all** of the specified tag IDs (AND logic). Pass an array of tag UUIDs.
+</ParamField>
+
+<ParamField body="chunk_types" type="array">
+  Filter by chunk content type. Valid values: `TEXT`, `TABLE`, `IMAGE`, `HTML`, `UNKNOWN`. Only chunks matching at least one listed type are returned.
+</ParamField>
+
+<ParamField body="active_version_only" type="boolean">
+  When `true` (default), only chunks from the active document version are returned. Set to `false` to search across all versions.
+</ParamField>
+
+<ParamField body="ingestion_time_after" type="string">
+  ISO 8601 datetime string. Only chunks ingested after this timestamp are returned.
+</ParamField>
+
+<ParamField body="with_document" type="boolean">
+  When `true`, each result includes the ancestor `document` and `document_version` objects. Defaults to `false`.
+</ParamField>
+
+### Response
+
+Returns an array of `ScoredChunkResponse` objects ordered by relevance score descending.
+
+<ResponseField name="score" type="number">
+  Cosine similarity score (`1 - cosine_distance`). Higher is more relevant. Range: 0–1 for `dense_only`; BM25 scores may exceed 1.
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  Chunk UUID.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  The text content of the chunk.
+</ResponseField>
+
+<ResponseField name="chunk_type" type="string">
+  Content type of the chunk: `TEXT`, `TABLE`, `IMAGE`, `HTML`, or `UNKNOWN`.
+</ResponseField>
+
+<ResponseField name="chunk_metadata" type="object">
+  Chunk-level metadata object (type-specific fields vary by `chunk_type`).
+</ResponseField>
+
+<ResponseField name="path_part_id" type="string">
+  UUID of the path part node this chunk belongs to.
+</ResponseField>
+
+<ResponseField name="parent_path_id" type="string">
+  UUID of the parent path part (typically the document version or section).
+</ResponseField>
+
+<ResponseField name="prev_sibling_path_id" type="string | null">
+  UUID of the preceding sibling chunk, or `null` if this is the first.
+</ResponseField>
+
+<ResponseField name="next_sibling_path_id" type="string | null">
+  UUID of the following sibling chunk, or `null` if this is the last.
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string">
+  Full slash-delimited path from the root to this chunk.
+</ResponseField>
+
+<ResponseField name="num_tokens" type="integer | null">
+  Token count of the chunk content, if available.
+</ResponseField>
+
+<ResponseField name="asset_urls" type="array">
+  Time-limited URLs for downloading visual assets (e.g. images) associated with the chunk. Populated for `IMAGE`, `TABLE`, and `HTML` chunk types.
+</ResponseField>
+
+<ResponseField name="document" type="object | null">
+  Populated when `with_document=true`. Contains the ancestor document's `id`, `name`, `document_type`, and `document_origin`.
+</ResponseField>
+
+<ResponseField name="document_version" type="object | null">
+  Populated when `with_document=true`. Contains the ancestor version's `id`, `version` number, and `name`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/chunks/search \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is our refund policy for annual subscriptions?",
+    "search_type": "dense_only",
+    "top_k": 10,
+    "score_threshold": 0.4,
+    "tag_ids": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"],
+    "active_version_only": true,
+    "with_document": true
+  }'
+```
+
+**Response**
+
+```json
+[
+  {
+    "id": "7f3a1b9c-4e2d-4a8f-b6c1-d9e0f1234567",
+    "score": 0.87,
+    "content": "Annual subscriptions are eligible for a full refund within 30 days of purchase...",
+    "chunk_type": "TEXT",
+    "chunk_metadata": {},
+    "path_part_id": "2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6",
+    "parent_path_id": "1a2b3c4d-5e6f-7a8b-9c0d-e1f2a3b4c5d6",
+    "prev_sibling_path_id": null,
+    "next_sibling_path_id": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+    "materialized_path": "/shared/policies/refunds/v0/chunk-1",
+    "num_tokens": 64,
+    "asset_urls": [],
+    "document": {
+      "id": "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a",
+      "name": "Refund Policy",
+      "document_type": "PLAINTEXT",
+      "document_origin": "SOURCE"
+    },
+    "document_version": {
+      "id": "e1f2a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+      "version": 0,
+      "name": "v0"
+    },
+    "system_managed": false,
+    "tenant_id": "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+    "created_at": "2025-03-01T10:00:00Z",
+    "updated_at": "2025-03-01T10:00:00Z"
+  }
+]
+```
+
+---
+
+## SearchType
+
+Controls the search algorithm used to find matching chunks.
+
+| Value | Description |
+|---|---|
+| `dense_only` | **Default.** Dense vector (semantic) search using cosine similarity. Best for natural language questions and conceptual queries. |
+| `full_text` | BM25 keyword search. Best for exact term matching, IDs, codes, and structured queries where token overlap matters. |
+
+<Note>
+  `dense_only` relies on embeddings and handles paraphrases and synonyms well. Use `full_text` when your users are searching for specific strings (e.g. contract numbers, product codes).
+</Note>
+
+---
+
+## Getting context around a result
+
+After a search, you often want the surrounding text to provide better context for an AI model or UI. Use the neighbors endpoint to fetch sibling chunks before and after a result.
+
+### GET /v1/chunks/{chunk_id}/neighbors
+
+```
+GET https://api-staging.knowledgestack.ai/v1/chunks/{chunk_id}/neighbors
+```
+
+**Query parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prev` | integer | `1` | Number of preceding siblings to include (0–20). |
+| `next` | integer | `1` | Number of succeeding siblings to include (0–20). |
+| `chunks_only` | boolean | `false` | When `true`, traversal stops at the first non-CHUNK sibling in each direction. |
+
+**Response**
+
+```json
+{
+  "items": [
+    { "part_type": "CHUNK", "id": "...", "content": "Previous paragraph..." },
+    { "part_type": "CHUNK", "id": "7f3a1b9c-...", "content": "Annual subscriptions are eligible..." },
+    { "part_type": "CHUNK", "id": "...", "content": "To request a refund, contact support..." }
+  ],
+  "anchor_index": 1
+}
+```
+
+`anchor_index` is the position of your original chunk in the `items` array. Items are returned in sibling order (preceding → anchor → succeeding).
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/chunks/7f3a1b9c-4e2d-4a8f-b6c1-d9e0f1234567/neighbors?prev=2&next=2 \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Searching within a path subtree
+
+To retrieve all chunks under a specific folder or document, use the subtree chunks endpoint. This is useful for building indexes or pre-fetching all content under a known path.
+
+### GET /v1/path-parts/{path_part_id}/subtree_chunks
+
+```
+GET https://api-staging.knowledgestack.ai/v1/path-parts/{path_part_id}/subtree_chunks
+```
+
+Returns a `SubtreeChunksResponse` with a `groups` array. Each group represents a set of chunks that share the same `path_part_ids` and `tag_ids` — useful for batching downstream operations.
+
+```json
+{
+  "groups": [
+    {
+      "chunk_ids": ["7f3a1b9c-...", "8b9c0d1e-..."],
+      "path_part_ids": ["2c8d5e7f-..."],
+      "tag_ids": ["a1b2c3d4-..."]
+    }
+  ]
+}
+```
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/path-parts/2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6/subtree_chunks \
+  -H "Authorization: Bearer <your-api-key>"
+```

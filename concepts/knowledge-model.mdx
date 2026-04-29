@@ -1,0 +1,193 @@
+---
+title: "Knowledge Model"
+description: "Understand how Knowledge Stack organizes content — from folders and documents down to the individual chunks that power semantic search."
+---
+
+Knowledge Stack stores your content in a five-level hierarchy. Each level serves a distinct purpose, and understanding the model helps you design your integration effectively.
+
+```
+Folder
+└── Document
+    └── Document Version
+        └── Section
+            └── Chunk
+```
+
+---
+
+## Folders
+
+A **folder** is a container for documents. Folders support nesting, so you can mirror your existing organizational structure — teams, products, topics, or any other taxonomy.
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/folders
+Content-Type: application/json
+
+{
+  "name": "Product Docs",
+  "parent_folder_id": null
+}
+```
+
+You can search across all items (folders and documents) using `GET /v1/folders/search`, and list a folder's direct children with `GET /v1/folders/{folder_id}/contents`.
+
+<Tip>
+  Folders are also the unit of path-based access control. Granting a permission on a folder automatically covers every document inside it. See [Permissions](/concepts/permissions).
+</Tip>
+
+---
+
+## Documents
+
+A **document** lives inside a folder and represents a named knowledge artifact — a policy, a manual, a specification, and so on.
+
+Each document has two important attributes:
+
+- **Type** (`DocumentType`) — classifies what kind of content the document contains (for example, `file`, `webpage`, or other values from the `DocumentType` enum).
+- **Origin** (`DocumentOrigin`) — records where the content came from (for example, uploaded directly or sourced from an external system).
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/documents
+Content-Type: application/json
+
+{
+  "name": "Employee Handbook",
+  "folder_id": "fld_abc123",
+  "document_type": "file"
+}
+```
+
+A document on its own holds no content — content lives in document versions.
+
+---
+
+## Document versions
+
+A **document version** is a snapshot of a document's content at a point in time. Documents can have multiple versions, letting you update content without losing history.
+
+Each version goes through an **ingestion pipeline** when it is created from a file or URL. The pipeline's progress is tracked via a `PipelineStatus`:
+
+| Status | Meaning |
+|---|---|
+| `pending` | Version created, ingestion not yet started |
+| `processing` | Pipeline is running — splitting, embedding, indexing |
+| `complete` | Content is fully indexed and searchable |
+| `failed` | Pipeline encountered an error |
+
+Versions also support **lifecycle actions** (`DocumentVersionAction`):
+
+- **promote** — mark a version as the current active version
+- **archive** — retire a version without deleting it
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}
+Content-Type: application/json
+
+{
+  "action": "promote"
+}
+```
+
+You can attach arbitrary structured metadata to a version with `PATCH /v1/document_versions/{version_id}/metadata`, and retrieve its full contents with `GET /v1/document_versions/{version_id}/contents`.
+
+---
+
+## Sections
+
+A **section** is a logical subdivision of a document version — think chapters, headings, or topic blocks. Sections give you a way to reason about content at a coarser granularity than individual chunks.
+
+When you ingest a document, the pipeline automatically creates sections based on the document's structure. You can also create, update, and delete sections manually via the `/v1/sections` endpoints.
+
+```http
+GET https://api-staging.knowledgestack.ai/v1/sections/{section_id}
+```
+
+If you want to flatten a section back into its parent document version without deleting its chunks, use `POST /v1/sections/{section_id}/dissolve`.
+
+---
+
+## Chunks
+
+A **chunk** is the atomic unit of content in Knowledge Stack. It is a passage of text — typically a paragraph or a few sentences — paired with a vector embedding that enables semantic search.
+
+Every chunk carries:
+
+- **Content** — the raw text passage
+- **Metadata** — key/value pairs you can query and filter on
+- **Type** (`ChunkType`) — classifies the chunk (for example, text, image description)
+- **Lineage** — a record of where the chunk came from and how it relates to other chunks across versions
+
+```http
+POST https://api-staging.knowledgestack.ai/v1/chunks/search
+Content-Type: application/json
+
+{
+  "query": "what is our refund policy?",
+  "limit": 5
+}
+```
+
+You can retrieve neighboring chunks (the passages immediately before and after a given chunk) using `GET /v1/chunks/{chunk_id}/neighbors` — useful for expanding context around a search result.
+
+<Note>
+  You can create chunks manually via `POST /v1/chunks`, but in most cases ingestion creates them for you automatically.
+</Note>
+
+### Chunk lineage
+
+Lineage tracks how chunks relate across document versions. When you ingest a new version of a document, Knowledge Stack links updated chunks back to their predecessors. This lets you trace content evolution over time using `GET /v1/chunk-lineages/{chunk_id}`.
+
+---
+
+## Path parts
+
+Every folder and document in the hierarchy has a corresponding **path part** — a node in the folder/document tree. Path parts are represented by the `ABCDPathSnapshot` schema and are the foundation of the path-based permission system.
+
+You can traverse the tree using:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/path-parts` | List all path parts you have access to |
+| `GET /v1/path-parts/{path_part_id}/ancestry` | Get the full ancestor chain up to the root |
+| `GET /v1/path-parts/{path_part_id}/subtree_chunks` | Get all chunks under a path part |
+
+Path parts also support **tags**, so you can attach labels to any node in the tree for filtering and organization.
+
+---
+
+## Ingestion pipeline
+
+When you upload a file to Knowledge Stack, it goes through an automated ingestion pipeline:
+
+<Steps>
+  <Step title="Submit the file">
+    Call `POST /v1/documents/ingest` with your file and target folder. This creates both a document and an initial version in one request.
+
+    ```http
+    POST https://api-staging.knowledgestack.ai/v1/documents/ingest
+    Content-Type: multipart/form-data
+
+    file=@handbook.pdf
+    folder_id=fld_abc123
+    ```
+  </Step>
+  <Step title="Pipeline processes the content">
+    Knowledge Stack splits the document into sections and chunks, generates vector embeddings for each chunk, and indexes everything for search. The version's `PipelineStatus` moves from `pending` → `processing` → `complete`.
+  </Step>
+  <Step title="Check the version status">
+    Poll `GET /v1/document_versions/{version_id}` or list workflows at `GET /v1/workflows/document_versions` to confirm the pipeline has finished.
+
+    ```http
+    GET https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}
+    ```
+  </Step>
+  <Step title="Start searching">
+    Once the status is `complete`, your chunks are indexed and ready for semantic search via `POST /v1/chunks/search`.
+  </Step>
+</Steps>
+
+To ingest a new version of an existing document, use `POST /v1/documents/{document_id}/ingest` instead. This keeps the document record intact and adds a new version alongside any previous ones.
+
+<Warning>
+  A document version is not searchable until its pipeline status reaches `complete`. Searching while a version is still `processing` will return results only from previously completed versions of the same document.
+</Warning>

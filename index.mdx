@@ -1,0 +1,55 @@
+---
+title: "Knowledge Stack"
+description: "The API for ingesting, organizing, and semantically searching your knowledge base."
+---
+
+Knowledge Stack gives you a complete backend for managing documents, running semantic search, and powering AI-driven conversations — all through a clean REST API.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Make your first API call in minutes
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Get your API key and authenticate requests
+  </Card>
+  <Card title="Ingest Documents" icon="file-arrow-up" href="/guides/ingest-documents">
+    Upload and process documents into your knowledge base
+  </Card>
+  <Card title="Semantic Search" icon="magnifying-glass" href="/guides/search">
+    Search across your knowledge base with natural language
+  </Card>
+</CardGroup>
+
+## What you can build
+
+Knowledge Stack handles the heavy lifting of knowledge management so you can focus on your product.
+
+<CardGroup cols={2}>
+  <Card title="Knowledge Model" icon="sitemap" href="/concepts/knowledge-model">
+    Understand folders, documents, versions, and chunks
+  </Card>
+  <Card title="AI Threads" icon="comments" href="/guides/threads">
+    Power conversational Q&A over your documents
+  </Card>
+  <Card title="Workflows" icon="gears" href="/guides/workflows">
+    Automate ingestion and processing pipelines
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/auth/overview">
+    Full reference for every endpoint
+  </Card>
+</CardGroup>
+
+<Steps>
+  <Step title="Get an API key">
+    Sign in to your workspace and create an API key from the dashboard, or call `POST /v1/api-keys`.
+  </Step>
+  <Step title="Ingest a document">
+    Upload a file or provide a URL to `POST /v1/documents/ingest`. Knowledge Stack processes and chunks it automatically.
+  </Step>
+  <Step title="Search your knowledge base">
+    Run a semantic search with `POST /v1/chunks/search` to find the most relevant chunks for any query.
+  </Step>
+  <Step title="Start a conversation">
+    Create a thread and send a user message. Knowledge Stack retrieves context and streams an AI response.
+  </Step>
+</Steps>

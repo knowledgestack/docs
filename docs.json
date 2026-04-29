@@ -1,0 +1,105 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Knowledge Stack",
+  "theme": "luma",
+  "colors": {
+    "primary": "#2D2D2D",
+    "light": "#F5F5F0",
+    "dark": "#1A1A1A"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/knowledgestack"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "authentication",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/knowledge-model",
+              "concepts/tenants",
+              "concepts/permissions"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/ingest-documents",
+              "guides/search",
+              "guides/threads",
+              "guides/workflows"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api-reference/auth/overview",
+              "api-reference/auth/password",
+              "api-reference/auth/sso"
+            ]
+          },
+          {
+            "group": "Knowledge",
+            "pages": [
+              "api-reference/knowledge/folders",
+              "api-reference/knowledge/documents",
+              "api-reference/knowledge/document-versions",
+              "api-reference/knowledge/sections",
+              "api-reference/knowledge/chunks"
+            ]
+          },
+          {
+            "group": "Search & AI",
+            "pages": [
+              "api-reference/search/semantic-search",
+              "api-reference/threads/threads",
+              "api-reference/threads/messages"
+            ]
+          },
+          {
+            "group": "Organization",
+            "pages": [
+              "api-reference/tags",
+              "api-reference/path-parts"
+            ]
+          },
+          {
+            "group": "Workspace",
+            "pages": [
+              "api-reference/workspace/tenants",
+              "api-reference/workspace/users",
+              "api-reference/workspace/groups",
+              "api-reference/workspace/invites",
+              "api-reference/workspace/api-keys"
+            ]
+          },
+          {
+            "group": "Workflows",
+            "pages": [
+              "api-reference/workflows/definitions",
+              "api-reference/workflows/runs"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

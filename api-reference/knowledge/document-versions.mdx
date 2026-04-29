@@ -1,0 +1,385 @@
+---
+title: "Document Versions"
+description: "Create and manage versioned snapshots of a document's content and pipeline state."
+---
+
+Every document has one or more versions. Versions are numbered starting from `0` (`v0`, `v1`, `v2`, ...). Each version has an independent ingestion pipeline state and its own sections and chunks. Only the document's **active version** is used by default for search and retrieval.
+
+## Pipeline state
+
+After ingestion is triggered, the `pipeline_state` field in `system_metadata` tracks progress:
+
+| `PipelineStatus` | Meaning |
+|-----------------|---------|
+| `pending` | Ingestion workflow has been queued but not started |
+| `processing` | Ingestion is actively running |
+| `completed` | Ingestion finished successfully |
+| `failed` | Ingestion failed; see `pipeline_state.error` for details |
+| `cancelled` | Ingestion was cancelled |
+
+## Version actions
+
+The `DocumentVersionAction` enum currently supports one action:
+
+| Value | Description |
+|-------|-------------|
+| `reembed` | Re-run vector embedding for all chunks in this version |
+
+---
+
+## Create version
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/documents/{document_id}/versions`
+
+Create a new empty version for a document. The version number is automatically incremented. Use this when you want to populate content manually rather than through file ingestion.
+
+### Path parameters
+
+<ParamField path="document_id" type="string (uuid)" required>
+  The document to create a new version for.
+</ParamField>
+
+### Response `200`
+
+Returns a `DocumentVersionResponse`.
+
+<ResponseField name="id" type="string (uuid)">
+  Document version ID.
+</ResponseField>
+<ResponseField name="path_part_id" type="string (uuid)">
+  Underlying path part ID.
+</ResponseField>
+<ResponseField name="version" type="integer">
+  Version number (0, 1, 2, ...).
+</ResponseField>
+<ResponseField name="name" type="string">
+  Auto-generated name (e.g. `v0`, `v1`).
+</ResponseField>
+<ResponseField name="parent_path_id" type="string (uuid) | null">
+  The parent document's path part ID.
+</ResponseField>
+<ResponseField name="materialized_path" type="string">
+  Full path from root.
+</ResponseField>
+<ResponseField name="system_managed" type="boolean">
+  Whether this version is system-managed.
+</ResponseField>
+<ResponseField name="tenant_id" type="string (uuid)">
+  Owning tenant.
+</ResponseField>
+<ResponseField name="created_at" type="string (datetime)">
+  Creation timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="updated_at" type="string (datetime)">
+  Last update timestamp (ISO 8601).
+</ResponseField>
+<ResponseField name="source_url" type="string | null">
+  Time-limited URL to download the source document. `null` until ingestion completes.
+</ResponseField>
+<ResponseField name="plaintext_url" type="string | null">
+  Time-limited URL to download a plain-text export of the document. `null` until ingestion completes.
+</ResponseField>
+<ResponseField name="system_metadata" type="DocumentVersionMetadata">
+  Pipeline state, artifact URLs, and document statistics.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/<document-id>/versions \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## List versions
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/document_versions`
+
+List all versions for a document.
+
+### Query parameters
+
+<ParamField query="document_id" type="string (uuid)">
+  The document whose versions to list.
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated list of `DocumentVersionResponse` objects.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/document_versions?document_id=<document-id>&limit=10" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Get version
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}`
+
+Get a single document version by ID.
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The document version ID.
+</ParamField>
+
+### Response `200`
+
+Returns a `DocumentVersionResponse`. See [Create version](#create-version) for field descriptions.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Delete version
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}`
+
+Delete a document version and all of its sections and chunks.
+
+<Note>
+  You cannot delete the document's active version. To delete the active version, first promote a different version using `PATCH /v1/documents/{document_id}`.
+</Note>
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The version ID to delete.
+</ParamField>
+
+### Response `200`
+
+Returns an empty `{}` on success.
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/document_versions/<version-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Version action
+
+<br />
+
+`POST https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}`
+
+Perform an action on a document version.
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The version to act on.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="action" type="string" required>
+  The action to perform. Currently supported: `reembed`.
+</ParamField>
+
+### Response `200`
+
+Returns a `DocumentVersionActionResponse`.
+
+<ResponseField name="version_id" type="string (uuid)">
+  The version ID the action was applied to.
+</ResponseField>
+<ResponseField name="action" type="string">
+  The action performed.
+</ResponseField>
+<ResponseField name="workflow_id" type="string">
+  Workflow ID for tracking the background job.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>?action=reembed" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "version_id": "b2c3d4e5-0000-0000-0000-000000000002",
+  "action": "reembed",
+  "workflow_id": "reembed-xyz789"
+}
+```
+
+---
+
+## Update version metadata
+
+<br />
+
+`PATCH https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}/metadata`
+
+Partially update the `system_metadata` of a document version. Only the provided fields are merged into the existing metadata — omitted fields are left unchanged.
+
+<Note>
+  You typically do not need to call this endpoint directly — the ingestion pipeline updates version metadata automatically. Use it when you need to manually correct document statistics or pipeline state.
+</Note>
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The version ID to update.
+</ParamField>
+
+### Request body (`DocumentVersionMetadataUpdate`)
+
+All fields are optional. Provide only the fields you want to update.
+
+<ParamField body="pipeline_state" type="PipelineState">
+  Updated pipeline execution state object.
+</ParamField>
+
+<ParamField body="total_pages" type="integer">
+  Total number of pages in the document.
+</ParamField>
+
+<ParamField body="total_sections" type="integer">
+  Total number of sections created by ingestion.
+</ParamField>
+
+<ParamField body="total_chunks" type="integer">
+  Total number of chunks created by ingestion.
+</ParamField>
+
+<ParamField body="hash" type="string">
+  Base64-encoded SHA-256 hash of the source file.
+</ParamField>
+
+
+
+### Response `200`
+
+Returns the updated `DocumentVersionResponse`.
+
+### Example
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>/metadata \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "total_pages": 42,
+    "total_chunks": 187
+  }'
+```
+
+---
+
+## Get version contents
+
+<br />
+
+`GET https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}/contents`
+
+Get the top-level contents of a document version as a paginated list of sections and chunks. Each item is a discriminated union of `SectionContentItem` or `ChunkContentItem`, identified by the `part_type` field.
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The version whose contents to retrieve.
+</ParamField>
+
+### Query parameters
+
+<ParamField query="section_id" type="string (uuid)">
+  Restrict contents to a specific section.
+</ParamField>
+
+<ParamField query="content_type" type="string">
+  Filter by content type (`SECTION` or `CHUNK`).
+</ParamField>
+
+<ParamField query="limit" type="integer">
+  Page size.
+</ParamField>
+
+<ParamField query="offset" type="integer">
+  Pagination offset.
+</ParamField>
+
+### Response `200`
+
+Returns a paginated list of `SectionContentItem | ChunkContentItem` discriminated by `part_type`.
+
+### Example
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>/contents?limit=50" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Clear version contents
+
+<br />
+
+`DELETE https://api-staging.knowledgestack.ai/v1/document_versions/{version_id}/contents`
+
+Delete all top-level sections and chunks belonging to a document version. The version record itself is preserved.
+
+<Note>
+  This permanently removes all content under the version. It is typically used before re-ingesting a version to start fresh.
+</Note>
+
+### Path parameters
+
+<ParamField path="version_id" type="string (uuid)" required>
+  The version whose contents to clear.
+</ParamField>
+
+### Response `200`
+
+Returns a `ClearVersionContentsResponse`.
+
+<ResponseField name="deleted" type="integer">
+  Number of top-level children (sections or chunks) deleted.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>/contents \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+```json
+{
+  "deleted": 24
+}
+```

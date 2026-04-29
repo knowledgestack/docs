@@ -1,0 +1,132 @@
+{
+  "projectType": "api-service",
+  "projectName": "Knowledge Stack",
+  "projectDescription": "A knowledge management API for ingesting, organizing, and semantically searching documents within multi-tenant workspaces.",
+  "theme": "luma",
+  "primaryColor": "#2D2D2D",
+  "lightColor": "#F5F5F0",
+  "darkColor": "#1A1A1A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "authentication",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/knowledge-model",
+              "concepts/tenants",
+              "concepts/permissions"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/ingest-documents",
+              "guides/search",
+              "guides/threads",
+              "guides/workflows"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api-reference/auth/overview",
+              "api-reference/auth/password",
+              "api-reference/auth/sso"
+            ]
+          },
+          {
+            "group": "Knowledge",
+            "pages": [
+              "api-reference/knowledge/folders",
+              "api-reference/knowledge/documents",
+              "api-reference/knowledge/document-versions",
+              "api-reference/knowledge/sections",
+              "api-reference/knowledge/chunks"
+            ]
+          },
+          {
+            "group": "Search & AI",
+            "pages": [
+              "api-reference/search/semantic-search",
+              "api-reference/threads/threads",
+              "api-reference/threads/messages"
+            ]
+          },
+          {
+            "group": "Organization",
+            "pages": [
+              "api-reference/tags",
+              "api-reference/path-parts"
+            ]
+          },
+          {
+            "group": "Workspace",
+            "pages": [
+              "api-reference/workspace/tenants",
+              "api-reference/workspace/users",
+              "api-reference/workspace/groups",
+              "api-reference/workspace/invites",
+              "api-reference/workspace/api-keys"
+            ]
+          },
+          {
+            "group": "Workflows",
+            "pages": [
+              "api-reference/workflows/definitions",
+              "api-reference/workflows/runs"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Document ingestion and version management",
+    "Semantic chunk search with vector embeddings",
+    "Conversational threads with AI streaming",
+    "Multi-tenant workspace isolation",
+    "Role-based access control and group permissions",
+    "Custom workflow definitions and runs",
+    "SSO and directory sync support",
+    "Tag-based and path-based content organization"
+  ],
+  "publicApiSurface": [
+    "POST /v1/auth/pw/signin",
+    "POST /v1/auth/sso/initiate",
+    "POST /v1/documents/ingest",
+    "GET /v1/documents",
+    "GET /v1/documents/{document_id}",
+    "POST /v1/documents/{document_id}/versions",
+    "POST /v1/chunks/search",
+    "GET /v1/chunks/{chunk_id}",
+    "POST /v1/threads",
+    "POST /v1/threads/{thread_id}/user_message",
+    "GET /v1/threads/{thread_id}/stream",
+    "GET /v1/folders",
+    "POST /v1/folders",
+    "GET /v1/tenants",
+    "POST /v1/tenants/{tenant_id}/users/{user_id}/activate",
+    "POST /v1/api-keys",
+    "GET /v1/api-keys",
+    "POST /v1/workflow-definitions",
+    "POST /v1/workflow-definitions/{definition_id}/invoke",
+    "GET /v1/tags",
+    "POST /v1/invites",
+    "GET /v1/user-permissions"
+  ]
+}

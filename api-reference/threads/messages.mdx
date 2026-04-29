@@ -1,0 +1,286 @@
+---
+title: "Thread Messages"
+description: "Read, list, and create messages within a thread."
+---
+
+Thread messages are the individual turns in a conversation — user inputs, AI-generated responses, and system messages. You can list historical messages, fetch a specific message, or write messages directly (e.g. when replaying or constructing conversations programmatically).
+
+For triggering AI generation from a user message, see [Threads](/api-reference/threads/threads#post-v1-threads-thread_id-user_message) — use `POST /v1/threads/{thread_id}/user_message` instead.
+
+---
+
+## POST /v1/threads/{thread_id}/messages
+
+Create a message directly in a thread without triggering AI generation. Returns `201` on success.
+
+```
+POST https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/messages
+```
+
+### Path parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `thread_id` | string (UUID) | The thread to create the message in. |
+
+### Request body
+
+<ParamField body="role" type="string" required>
+  The author role for this message. See [MessageRole](#messagerole) for values.
+</ParamField>
+
+<ParamField body="content" type="object" required>
+  Message content object. Contains `text` (required) and optionally `citations`, `is_error`, and `references`.
+
+  <Expandable title="content fields">
+    <ParamField body="content.text" type="string" required>
+      The text body of the message.
+    </ParamField>
+    <ParamField body="content.is_error" type="boolean">
+      Set to `true` if this message represents a terminal error from the assistant.
+    </ParamField>
+    <ParamField body="content.citations" type="array">
+      Array of `Citation` objects referencing source chunks. Each citation has `chunk_id`, `quote`, `start_char`, and `length`.
+    </ParamField>
+    <ParamField body="content.references" type="array">
+      Resolved inline references attached to this message.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="message_id" type="string">
+  Optional caller-supplied UUID for the message. Use this to make the create operation idempotent — submitting the same `message_id` twice returns the existing message without creating a duplicate.
+</ParamField>
+
+<ParamField body="details" type="object">
+  Execution step data for assistant messages (e.g. tool call traces). Omit for user messages.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/messages \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "USER",
+    "content": {
+      "text": "What is the cancellation window for annual plans?"
+    }
+  }'
+```
+
+---
+
+## GET /v1/threads/{thread_id}/messages
+
+List all messages in a thread, ordered by `created_at` descending (newest first).
+
+```
+GET https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/messages
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `limit` | integer | `20` | Items per page (1–100). |
+| `offset` | integer | `0` | Items to skip. |
+| `before` | string (datetime) | — | Cursor for keyset pagination. Returns only messages with `created_at` before this ISO 8601 timestamp. |
+| `with_details` | boolean | `true` | Include execution step data in each message. Set to `false` to reduce payload size when you only need message text. |
+
+Returns a paginated response with a `data` array of `ThreadMessageResponse` objects.
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/messages?limit=50&with_details=false" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## GET /v1/threads/{thread_id}/messages/{message_id}
+
+Fetch a single message by ID.
+
+```
+GET https://api-staging.knowledgestack.ai/v1/threads/{thread_id}/messages/{message_id}
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `with_details` | boolean | `true` | Include execution step data. |
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/threads/a1b2c3d4-e5f6-7890-abcd-ef1234567890/messages/d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a?with_details=false" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## ThreadMessageResponse
+
+<ResponseField name="id" type="string">
+  Message UUID.
+</ResponseField>
+
+<ResponseField name="thread_id" type="string">
+  UUID of the thread this message belongs to (via `parent_path_id`).
+</ResponseField>
+
+<ResponseField name="path_part_id" type="string">
+  UUID of the path part node for this message.
+</ResponseField>
+
+<ResponseField name="sequence" type="integer">
+  Sequence number of this message within the thread (derived from path part name). Use this to display messages in conversation order.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  Author role: `USER`, `ASSISTANT`, or `SYSTEM`. See [MessageRole](#messagerole).
+</ResponseField>
+
+<ResponseField name="content" type="object">
+  Message content. See [EnrichedThreadMessageContent](#enrichedthreadmessagecontent).
+</ResponseField>
+
+<ResponseField name="details" type="object | null">
+  Execution step data for assistant messages, or `null` when not requested (`with_details=false`) or not applicable.
+</ResponseField>
+
+<ResponseField name="parent_path_id" type="string">
+  UUID of the thread's path part (the message's parent in the hierarchy).
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string">
+  Full path from root to this message.
+</ResponseField>
+
+<ResponseField name="tenant_id" type="string">
+  Tenant UUID.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 last-updated timestamp.
+</ResponseField>
+
+---
+
+## EnrichedThreadMessageContent
+
+The `content` field on a `ThreadMessageResponse` uses the enriched content type, which resolves citation references at read time.
+
+<ResponseField name="text" type="string">
+  The message text.
+</ResponseField>
+
+<ResponseField name="is_error" type="boolean | null">
+  `true` if the message represents a terminal assistant error.
+</ResponseField>
+
+<ResponseField name="citations" type="array | null">
+  Array of `EnrichedCitation` objects. These are the source references the AI used when generating the response.
+</ResponseField>
+
+<ResponseField name="references" type="array | null">
+  Resolved inline references attached to the message.
+</ResponseField>
+
+---
+
+## EnrichedCitation
+
+Citations link the AI's response back to specific passages in your knowledge base. Each citation points to a character span within a chunk.
+
+<ResponseField name="chunk_id" type="string">
+  UUID of the source chunk.
+</ResponseField>
+
+<ResponseField name="quote" type="string">
+  The verbatim quoted text from the chunk.
+</ResponseField>
+
+<ResponseField name="start_char" type="integer">
+  0-based character offset of the quote within the chunk's content string.
+</ResponseField>
+
+<ResponseField name="length" type="integer">
+  Character length of the quote.
+</ResponseField>
+
+<ResponseField name="document_id" type="string | null">
+  UUID of the source document, if resolved.
+</ResponseField>
+
+<ResponseField name="document_version_id" type="string | null">
+  UUID of the source document version, if resolved.
+</ResponseField>
+
+<ResponseField name="document_name" type="string | null">
+  Human-readable name of the source document, if resolved.
+</ResponseField>
+
+<ResponseField name="version_number" type="integer | null">
+  Version number of the source document, if resolved.
+</ResponseField>
+
+<ResponseField name="path_part_id" type="string | null">
+  UUID of the path part for the chunk, if resolved.
+</ResponseField>
+
+<ResponseField name="materialized_path" type="string | null">
+  Full path of the chunk in the hierarchy, if resolved.
+</ResponseField>
+
+---
+
+## MessageRole
+
+| Value | Description |
+|---|---|
+| `USER` | A message written by the end user. |
+| `ASSISTANT` | A message generated by the AI. |
+| `SYSTEM` | A system-level message (e.g. instructions or context injected by the platform). |
+
+---
+
+## Example response
+
+```json
+{
+  "id": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
+  "path_part_id": "e5f6a7b8-c9d0-1e2f-3a4b-5c6d7e8f9a0b",
+  "sequence": 2,
+  "role": "ASSISTANT",
+  "content": {
+    "text": "Annual subscriptions are eligible for a full refund within 30 days of purchase.",
+    "is_error": null,
+    "citations": [
+      {
+        "chunk_id": "7f3a1b9c-4e2d-4a8f-b6c1-d9e0f1234567",
+        "quote": "Annual subscriptions are eligible for a full refund within 30 days",
+        "start_char": 0,
+        "length": 67,
+        "document_id": "d1e2f3a4-b5c6-7d8e-9f0a-1b2c3d4e5f6a",
+        "document_version_id": "e1f2a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+        "document_name": "Refund Policy",
+        "version_number": 0,
+        "path_part_id": "2c8d5e7f-1a3b-4c6d-9e0f-a1b2c3d4e5f6",
+        "materialized_path": "/shared/policies/refunds/v0/chunk-1"
+      }
+    ],
+    "references": null
+  },
+  "details": null,
+  "parent_path_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "materialized_path": "/users/u1a2b3c4/threads/a1b2c3d4/2",
+  "tenant_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "created_at": "2025-04-01T12:01:15Z",
+  "updated_at": "2025-04-01T12:01:15Z"
+}
+```

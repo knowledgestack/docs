@@ -1,0 +1,320 @@
+---
+title: "AI Threads"
+description: "Create conversation threads that answer questions using your ingested knowledge base as context."
+---
+
+Threads are AI-powered conversation sessions grounded in your Knowledge Stack documents. The assistant retrieves relevant chunks from your knowledge base, cites its sources, and streams responses in real time via Server-Sent Events (SSE).
+
+---
+
+## Create a thread
+
+Start by creating a thread. You can optionally set its title and place it in a specific folder.
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/threads \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Q3 Revenue Analysis",
+    "parent_path_part_id": "<folder-path-part-id>"
+  }'
+```
+
+**Request fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `parent_path_part_id` | UUID | Optional. Folder to store the thread in. When omitted, the thread is placed in your personal threads folder automatically |
+| `title` | string | Optional. Thread title (max 255 characters). Mutually exclusive with `message_for_title` |
+| `message_for_title` | string | Optional. Pass a message here to have the API auto-generate a title from it. The message is **not** sent as a conversation message. Mutually exclusive with `title` |
+
+**Response**
+
+```json
+{
+  "id": "t1a2b3c4-...",
+  "path_part_id": "pp1a2b3-...",
+  "title": "Q3 Revenue Analysis",
+  "materialized_path": "/shared/finance/threads/q3-revenue-analysis",
+  "tenant_id": "tn1a2b3-...",
+  "created_at": "2024-10-15T09:00:00Z",
+  "updated_at": "2024-10-15T09:00:00Z"
+}
+```
+
+Save the `id` — you need it for all subsequent thread operations.
+
+---
+
+## Send a message
+
+Send a user message to the thread. The API returns immediately with a `workflow_id`; the assistant response is generated asynchronously and delivered via the SSE stream.
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/threads/<thread-id>/user_message \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "What were the key revenue drivers in Q3?"
+  }'
+```
+
+**Request fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `input_text` | string | The user's message text |
+
+**Response (202)**
+
+```json
+{
+  "workflow_id": "thread-agent:01929abc-..."
+}
+```
+
+The `202 Accepted` status means the message was received and the agent is generating a response. Connect to the SSE stream to receive it.
+
+---
+
+## Stream the response
+
+`GET /v1/threads/{thread_id}/stream` opens an SSE connection. The server pushes events as the assistant generates its response, allowing you to display content token-by-token.
+
+<CodeGroup>
+
+```bash curl
+curl -N -X GET "https://api-staging.knowledgestack.ai/v1/threads/<thread-id>/stream" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Accept: text/event-stream"
+```
+
+```javascript JavaScript
+const API_KEY = "<your-api-key>";
+const BASE_URL = "https://api-staging.knowledgestack.ai";
+const threadId = "<thread-id>";
+
+async function streamThread(threadId) {
+  const resp = await fetch(`${BASE_URL}/v1/threads/${threadId}/stream`, {
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      Accept: "text/event-stream",
+    },
+  });
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value, { stream: true });
+    // Each SSE line is "data: <payload>\n\n"
+    for (const line of chunk.split("\n")) {
+      if (line.startsWith("data: ")) {
+        const payload = line.slice(6);
+        if (payload === "[DONE]") return;
+        const event = JSON.parse(payload);
+        process.stdout.write(event.delta ?? "");
+      }
+    }
+  }
+}
+
+streamThread(threadId);
+```
+
+```python Python
+import requests
+
+API_KEY = "<your-api-key>"
+BASE_URL = "https://api-staging.knowledgestack.ai"
+thread_id = "<thread-id>"
+
+with requests.get(
+    f"{BASE_URL}/v1/threads/{thread_id}/stream",
+    headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Accept": "text/event-stream",
+    },
+    stream=True,
+) as resp:
+    for line in resp.iter_lines():
+        if line.startswith(b"data: "):
+            payload = line[6:]
+            if payload == b"[DONE]":
+                break
+            import json
+            event = json.loads(payload)
+            print(event.get("delta", ""), end="", flush=True)
+```
+
+</CodeGroup>
+
+**Stream query parameters**
+
+| Parameter | Description |
+|---|---|
+| `last_message_id` | UUID of the last message you received. Use this to resume a dropped stream without missing events |
+| `last_entry_id` | Last SSE entry ID received. Paired with `last_message_id` to replay missed entries |
+
+<Note>
+The SSE stream stays open until the assistant finishes generating. Keep the connection alive and handle reconnections using the `last_message_id` and `last_entry_id` parameters.
+</Note>
+
+---
+
+## List messages
+
+Once generation is complete, retrieve all messages in the thread:
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/threads/<thread-id>/messages" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+The response is a paginated list of `ThreadMessageResponse` objects.
+
+### Message structure
+
+```json
+{
+  "id": "m1a2b3c4-...",
+  "sequence": 2,
+  "role": "ASSISTANT",
+  "content": {
+    "text": "The key revenue drivers in Q3 were...",
+    "is_error": false,
+    "citations": [
+      {
+        "chunk_id": "c1a2b3-...",
+        "quote": "Product revenue grew 34% YoY driven by...",
+        "start_char": 0,
+        "length": 48,
+        "document_id": "d1a2b3-...",
+        "document_name": "Q3 Earnings Report.pdf",
+        "version_number": 1
+      }
+    ],
+    "references": []
+  },
+  "created_at": "2024-10-15T09:01:12Z"
+}
+```
+
+### Message roles
+
+| Role | Description |
+|---|---|
+| `USER` | A message sent by the user |
+| `ASSISTANT` | A response generated by the AI |
+| `SYSTEM` | A system-level message (e.g. thread configuration) |
+
+### Citations
+
+Each assistant message includes a `citations` array of `EnrichedCitation` objects. Each citation links the assistant's text back to the exact chunk it was sourced from.
+
+| Field | Description |
+|---|---|
+| `chunk_id` | ID of the source chunk |
+| `quote` | The exact text quoted from the chunk |
+| `start_char` | 0-based character offset of the quote within the chunk |
+| `length` | Length of the quoted string |
+| `document_id` | ID of the source document |
+| `document_name` | Human-readable document name |
+| `version_number` | Document version the chunk belongs to |
+| `path_part_id` | Path part ID for direct navigation |
+| `materialized_path` | Full path of the chunk in the folder hierarchy |
+
+---
+
+## Full conversation flow
+
+<Steps>
+
+### Create a thread
+
+```bash
+THREAD=$(curl -sX POST https://api-staging.knowledgestack.ai/v1/threads \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Policy Questions"}')
+THREAD_ID=$(echo $THREAD | jq -r '.id')
+```
+
+### Send a message
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/threads/$THREAD_ID/user_message" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input_text": "What is the maximum file size for uploads?"}'
+```
+
+### Open the SSE stream
+
+```bash
+curl -N "https://api-staging.knowledgestack.ai/v1/threads/$THREAD_ID/stream" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Accept: text/event-stream"
+```
+
+### Read completed messages
+
+```bash
+curl "https://api-staging.knowledgestack.ai/v1/threads/$THREAD_ID/messages" \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+</Steps>
+
+---
+
+## Submit feedback
+
+Collect user feedback on thread messages to improve quality or flag errors. The feedback endpoint is an upsert — submitting again with the same `target_id` updates the existing record.
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/feedback \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_type": "MESSAGE",
+    "target_id": "<message-id>",
+    "rating": "DOWN",
+    "reason": "BAD_CITATIONS",
+    "comment": "The cited document does not support this claim."
+  }'
+```
+
+**Request fields**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `target_type` | string | Yes | Entity to rate: `THREAD`, `MESSAGE`, `DOCUMENT`, `DOCUMENT_VERSION`, or `CHUNK` |
+| `target_id` | UUID | Yes | ID of the entity being rated |
+| `rating` | string | Yes | `UP` (positive) or `DOWN` (negative) |
+| `reason` | string | No | Reason code for negative feedback (see below) |
+| `comment` | string | No | Free-text comment (max 4000 characters) |
+
+**Feedback reason codes**
+
+| Code | Use when |
+|---|---|
+| `INCORRECT` | The answer is factually wrong |
+| `MISSING_INFO` | Important information was left out |
+| `NOT_RELEVANT` | The response didn't address the question |
+| `BAD_CITATIONS` | Citations don't support the claim |
+| `HALLUCINATION` | The assistant invented information not in the knowledge base |
+| `OCR_ERROR` | Source text was misread during ingestion |
+| `PARSING_ERROR` | Document structure was incorrectly parsed |
+| `STRUCTURE_ISSUE` | Headings, sections, or hierarchy are wrong |
+| `TABLE_ERROR` | Table data was extracted incorrectly |
+| `FORMATTING` | Response formatting is poor |
+| `OTHER` | Any other issue |
+
+<Tip>
+Collecting `DOWN` feedback with a `reason` helps you identify whether quality issues originate in ingestion (OCR, parsing) or retrieval (bad citations, hallucination), so you can target improvements effectively.
+</Tip>

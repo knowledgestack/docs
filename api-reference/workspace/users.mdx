@@ -1,0 +1,105 @@
+---
+title: "Users"
+description: "Retrieve and update the authenticated user's own profile."
+---
+
+These endpoints operate on the currently authenticated user's account. They let you fetch your profile and update personal details. To manage other users within a tenant, use the [Tenants](/api-reference/workspace/tenants) endpoints.
+
+## Get current user
+
+Returns the profile of the authenticated user.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/users/me
+```
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/users/me \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `UserResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the user.
+</ResponseField>
+
+<ResponseField name="email" type="string | null">
+  Email address of the user.
+</ResponseField>
+
+<ResponseField name="first_name" type="string | null">
+  First name of the user.
+</ResponseField>
+
+<ResponseField name="last_name" type="string | null">
+  Last name of the user.
+</ResponseField>
+
+<ResponseField name="idp_type" type="string">
+  Identity provider type used to authenticate this user (e.g. `password`, `google`, `saml`).
+</ResponseField>
+
+<ResponseField name="current_tenant_id" type="string">
+  UUID of the tenant the user is currently scoped to.
+</ResponseField>
+
+<ResponseField name="current_tenant_role" type="string">
+  The user's role in their current tenant. One of `USER`, `ADMIN`, `OWNER`.
+</ResponseField>
+
+<ResponseField name="default_tenant_id" type="string">
+  UUID of the tenant the user is directed to on sign-in.
+</ResponseField>
+
+**Example response**
+
+```json
+{
+  "id": "u1u2u3u4-...",
+  "email": "ada@acme.com",
+  "first_name": "Ada",
+  "last_name": "Lovelace",
+  "idp_type": "password",
+  "current_tenant_id": "a1b2c3d4-...",
+  "current_tenant_role": "ADMIN",
+  "default_tenant_id": "a1b2c3d4-..."
+}
+```
+
+---
+
+## Update current user
+
+Updates the authenticated user's profile. All fields are optional — only the fields you include are changed.
+
+```bash
+PATCH https://api-staging.knowledgestack.ai/v1/users
+```
+
+<ParamField body="first_name" type="string">
+  Updated first name.
+</ParamField>
+
+<ParamField body="last_name" type="string">
+  Updated last name.
+</ParamField>
+
+<ParamField body="default_tenant_id" type="string">
+  UUID of the tenant to set as the user's default login destination.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X PATCH https://api-staging.knowledgestack.ai/v1/users \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name": "Ada", "last_name": "Lovelace"}'
+```
+
+**Response** — `UserResponse`
+
+Returns the updated user profile. See [Get current user](#get-current-user) for the full field reference.

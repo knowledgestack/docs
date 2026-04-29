@@ -1,0 +1,380 @@
+---
+title: "Workflow Runs"
+description: "Inspect, manage, and interact with individual workflow run executions."
+---
+
+A workflow run is a single execution of a [workflow definition](/api-reference/workflows/definitions). Runs track lifecycle status, a snapshot of the configuration at trigger time, and any errors that occurred.
+
+This page also covers **document version ingestion workflows** — dedicated pipelines that track how documents are processed into the knowledge base.
+
+## WorkflowRunStatus values
+
+| Value       | Description                                          |
+|-------------|------------------------------------------------------|
+| `PENDING`   | The run has been created but not yet started.        |
+| `RUNNING`   | The runner is actively executing the workflow.       |
+| `COMPLETED` | The workflow finished successfully.                  |
+| `FAILED`    | The workflow encountered an unrecoverable error.     |
+
+## WorkflowRunnerType values
+
+| Value         | Description                                           |
+|---------------|-------------------------------------------------------|
+| `SELF_HOSTED` | The workflow runs on your own self-hosted runner. |
+
+---
+
+## Get run
+
+Returns the current state of a single workflow run.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflow-runs/{run_id}
+```
+
+<ParamField path="run_id" type="string" required>
+  UUID of the workflow run.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflow-runs/run-uuid-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowRunResponse`
+
+<ResponseField name="id" type="string">
+  UUID of the run.
+</ResponseField>
+
+<ResponseField name="workflow_definition_id" type="string">
+  UUID of the workflow definition that produced this run.
+</ResponseField>
+
+<ResponseField name="user_id" type="string">
+  UUID of the user who triggered the run.
+</ResponseField>
+
+<ResponseField name="runner_type" type="string">
+  The runner that executed this run. Currently always `SELF_HOSTED`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current lifecycle status. One of `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`.
+</ResponseField>
+
+<ResponseField name="started_at" type="string">
+  ISO 8601 timestamp when execution began.
+</ResponseField>
+
+<ResponseField name="completed_at" type="string | null">
+  ISO 8601 timestamp when execution finished. `null` if still in progress.
+</ResponseField>
+
+<ResponseField name="run_snapshot" type="object">
+  A frozen copy of the workflow configuration captured at trigger time, including sources, instructions, outputs, and template. This ensures the run record is self-contained even if the definition changes later.
+
+  <Expandable title="WorkflowRunSnapshot fields">
+    <ResponseField name="workflow_definition_id" type="string">
+      UUID of the definition at time of invocation.
+    </ResponseField>
+    <ResponseField name="workflow_name" type="string">
+      Name of the definition at time of invocation.
+    </ResponseField>
+    <ResponseField name="runner_type" type="string">
+      Runner type used.
+    </ResponseField>
+    <ResponseField name="user_id" type="string">
+      UUID of the triggering user.
+    </ResponseField>
+    <ResponseField name="max_run_duration_seconds" type="integer">
+      Timeout applied to this run.
+    </ResponseField>
+    <ResponseField name="sources" type="array">
+      Snapshot of source path parts.
+    </ResponseField>
+    <ResponseField name="instructions" type="array">
+      Snapshot of instruction path parts.
+    </ResponseField>
+    <ResponseField name="outputs" type="array">
+      Snapshot of output path parts.
+    </ResponseField>
+    <ResponseField name="template" type="object | null">
+      Snapshot of the template path part, if configured.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if the run failed. `null` otherwise.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the run record was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the last status update.
+</ResponseField>
+
+---
+
+## Delete run
+
+Deletes the record of a workflow run. This removes the run from the API — it does not cancel an in-progress execution.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/workflow-runs/{run_id}
+```
+
+<ParamField path="run_id" type="string" required>
+  UUID of the run to delete.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/workflow-runs/run-uuid-... \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+---
+
+## Run callback
+
+Called by your self-hosted runner to report the outcome of a run. Use this endpoint to signal completion or failure once your runner has finished processing.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/workflow-runs/{run_id}/callback
+```
+
+<ParamField path="run_id" type="string" required>
+  UUID of the run to update.
+</ParamField>
+
+<ParamField body="status" type="string" required>
+  Final status to set on the run. One of `COMPLETED` or `FAILED`.
+</ParamField>
+
+<ParamField body="error" type="string">
+  Error description if `status` is `FAILED`. Up to 8192 characters.
+</ParamField>
+
+<Note>
+  This endpoint is intended for your self-hosted runner, not for end-user clients. Secure the callback using your runner's webhook secret.
+</Note>
+
+**Example — successful run**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/workflow-runs/run-uuid-.../callback \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "COMPLETED"}'
+```
+
+**Example — failed run**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/workflow-runs/run-uuid-.../callback \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "FAILED", "error": "Timeout reading source document"}'
+```
+
+**Response** — `WorkflowCallbackResponse`
+
+---
+
+## List document version ingestion workflows
+
+Returns ingestion workflows for document versions. These track how documents were processed into the knowledge base.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflows/document_versions
+```
+
+<ParamField query="page" type="integer">
+  Page number (1-indexed).
+</ParamField>
+
+<ParamField query="page_size" type="integer">
+  Number of results per page.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflows/document_versions \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `PaginatedResponse[WorkflowSummaryResponse]`
+
+<ResponseField name="workflow_id" type="string">
+  Workflow ID for this ingestion job.
+</ResponseField>
+
+<ResponseField name="document_id" type="string">
+  UUID of the document associated with this ingestion.
+</ResponseField>
+
+<ResponseField name="document_version_id" type="string">
+  UUID of the document version being ingested.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Ingestion pipeline status. One of `pending`, `processing`, `completed`, `failed`, `cancelled`.
+</ResponseField>
+
+<ResponseField name="last_activity" type="string | null">
+  Description of the last recorded activity.
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if the ingestion failed.
+</ResponseField>
+
+<ResponseField name="last_run_timestamp" type="string">
+  ISO 8601 timestamp of the most recent run.
+</ResponseField>
+
+<ResponseField name="last_state_update_timestamp" type="string | null">
+  ISO 8601 timestamp of the last state change.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of record creation.
+</ResponseField>
+
+---
+
+## Get document version ingestion workflow
+
+Returns detailed information about a specific document version ingestion workflow.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflows/document_versions/{workflow_id}
+```
+
+<ParamField path="workflow_id" type="string" required>
+  The workflow ID returned when the ingestion was triggered.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflows/document_versions/<workflow-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowDetailResponse`
+
+Returns all fields from `WorkflowSummaryResponse` plus:
+
+<ResponseField name="execution_status" type="string">
+  Live execution status of the ingestion pipeline.
+</ResponseField>
+
+<ResponseField name="start_time" type="string">
+  ISO 8601 timestamp when the pipeline started.
+</ResponseField>
+
+<ResponseField name="close_time" type="string | null">
+  ISO 8601 timestamp when the pipeline completed. `null` if still running.
+</ResponseField>
+
+<ResponseField name="chunks_processed" type="integer | null">
+  Number of content chunks processed during ingestion.
+</ResponseField>
+
+---
+
+## Rerun document version ingestion
+
+Re-triggers the ingestion pipeline for a specific document version. Use this to retry a failed ingestion or reprocess after updating extraction settings. Knowledge Stack reuses the existing uploaded file — no re-upload needed.
+
+```bash
+POST https://api-staging.knowledgestack.ai/v1/workflows/document_versions/{workflow_id}
+```
+
+<ParamField path="workflow_id" type="string" required>
+  The workflow ID of the ingestion to rerun.
+</ParamField>
+
+**Example**
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/workflows/document_versions/<workflow-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowActionResponse`
+
+---
+
+## Get workflow status
+
+Returns the current execution status of any active workflow by its ID.
+
+```bash
+GET https://api-staging.knowledgestack.ai/v1/workflows/{workflow_id}
+```
+
+<ParamField path="workflow_id" type="string" required>
+  The workflow ID to query.
+</ParamField>
+
+**Example**
+
+```bash
+curl https://api-staging.knowledgestack.ai/v1/workflows/<workflow-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowStatusResponse`
+
+<ResponseField name="workflow_id" type="string">
+  The workflow ID.
+</ResponseField>
+
+<ResponseField name="execution_status" type="string">
+  Current execution status of the workflow.
+</ResponseField>
+
+<ResponseField name="start_time" type="string">
+  ISO 8601 timestamp when the workflow started.
+</ResponseField>
+
+<ResponseField name="close_time" type="string | null">
+  ISO 8601 timestamp when the workflow completed. `null` if still running.
+</ResponseField>
+
+---
+
+## Cancel workflow
+
+Cancels an in-progress workflow.
+
+```bash
+DELETE https://api-staging.knowledgestack.ai/v1/workflows/{workflow_id}
+```
+
+<ParamField path="workflow_id" type="string" required>
+  The workflow ID to cancel.
+</ParamField>
+
+<Warning>
+  Cancellation is best-effort. If the workflow has already completed or failed it cannot be cancelled. Check the status before cancelling.
+</Warning>
+
+**Example**
+
+```bash
+curl -X DELETE https://api-staging.knowledgestack.ai/v1/workflows/<workflow-id> \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Response** — `WorkflowCancelResponse`

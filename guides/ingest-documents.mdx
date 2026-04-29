@@ -1,0 +1,223 @@
+---
+title: "Ingest Documents"
+description: "Upload files into Knowledge Stack, track the ingestion pipeline, and manage document versions."
+---
+
+Getting content into Knowledge Stack is a two-step process: organise documents in **folders**, then ingest them. Once ingested, the pipeline converts your file into searchable chunks and makes them available for semantic search and AI threads.
+
+## Prerequisites
+
+All requests require a valid API key passed as a Bearer token:
+
+```
+Authorization: Bearer <your-api-key>
+```
+
+---
+
+## 1. Create a folder
+
+Folders are the top-level containers for your documents. Every document must live inside a folder.
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/folders \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Product Docs",
+    "parent_path_part_id": "<parent-folder-id>"
+  }'
+```
+
+**Request fields**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Folder name (max 255 characters) |
+| `parent_path_part_id` | UUID | Yes | ID of an existing folder to nest this one under |
+
+The response returns a `FolderResponse` object including the folder's `id` and `path_part_id`. Use the `path_part_id` when ingesting documents into this folder.
+
+---
+
+## 2. Ingest a document
+
+The fastest path to ingestion is the all-in-one endpoint `POST /v1/documents/ingest`. It accepts a multipart form upload, creates the document and its first version, uploads the file, and kicks off the ingestion pipeline in a single call.
+
+<Steps>
+
+### Upload the file
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/ingest \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/your/report.pdf" \
+  -F "path_part_id=<folder-path-part-id>" \
+  -F "name=Q3 Financial Report" \
+  -F "ingestion_mode=high_accuracy"
+```
+
+**Form fields**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file` | binary | Yes | The file to upload |
+| `path_part_id` | UUID | Yes | The `path_part_id` of the destination folder |
+| `name` | string | No | Document name. Defaults to the filename if omitted |
+| `ingestion_mode` | string | No | Processing strategy (see [Ingestion modes](#ingestion-modes)). Auto-resolved from file type when omitted |
+
+**Response (201)**
+
+```json
+{
+  "workflow_id": "ingest-doc:01929abc-...",
+  "document_id": "d1e2f3a4-...",
+  "document_version_id": "a1b2c3d4-..."
+}
+```
+
+Save the `workflow_id` — you will use it to monitor progress.
+
+### Monitor ingestion status
+
+Poll the workflow status endpoint until `status` is `completed` or `failed`.
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/workflows/document_versions/<workflow-id>" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+**Pipeline statuses**
+
+| Status | Meaning |
+|---|---|
+| `pending` | Workflow is queued, not yet started |
+| `processing` | Actively converting and chunking your document |
+| `completed` | Chunks are indexed and ready to search |
+| `failed` | Pipeline encountered an error — check the `error` field |
+| `cancelled` | Workflow was cancelled before completion |
+
+You can also list all ingestion workflows for your tenant:
+
+```bash
+curl -X GET "https://api-staging.knowledgestack.ai/v1/workflows/document_versions?limit=20&offset=0" \
+  -H "Authorization: Bearer <your-api-key>"
+```
+
+</Steps>
+
+---
+
+## Ingestion modes
+
+The `ingestion_mode` field controls how the pipeline converts and chunks your document. When you omit it, Knowledge Stack chooses the best mode for the file type automatically.
+
+| Mode | Best for | Behaviour |
+|---|---|---|
+| `high_accuracy` | PDFs with complex layouts, tables, or mixed content | Full page-level rendering with layout analysis. Slower but most accurate |
+| `standard` | DOCX, XLSX, PPTX, PLAINTEXT | Text-extraction with structural chunking. Good balance of speed and quality |
+| `single_chunk` | Images, CSVs, or content you want stored as one unit | Treats the entire file as a single chunk. No splitting occurs |
+
+<Tip>
+For PDFs that are mostly text (reports, papers, manuals), `high_accuracy` is the default and usually the right choice. For plain text files where structure doesn't matter, `standard` is faster.
+</Tip>
+
+---
+
+## Document types
+
+The `document_type` field is used when creating a document manually (see below). Knowledge Stack uses this to validate and route the file appropriately.
+
+| Value | Description |
+|---|---|
+| `PDF` | PDF files |
+| `DOCX` | Microsoft Word documents |
+| `PLAINTEXT` | Plain text files (.txt, .md, etc.) |
+| `IMAGE` | Image files (JPEG, PNG, etc.) |
+| `XLSX` | Microsoft Excel spreadsheets |
+| `CSV` | Comma-separated value files |
+| `PPTX` | Microsoft PowerPoint presentations |
+| `UNKNOWN` | Use when the type cannot be determined |
+
+---
+
+## Alternative: Manual document creation
+
+If you need more control — for example, when building the document record before the file is ready — you can create a document and version separately.
+
+<Steps>
+
+### Create a document record
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Architecture Decision Record",
+    "parent_path_part_id": "<folder-path-part-id>",
+    "document_type": "PLAINTEXT",
+    "document_origin": "SOURCE"
+  }'
+```
+
+This returns a `DocumentResponse` containing the `id` of the new document.
+
+### Create a version
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/<document-id>/versions \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+This returns a `DocumentVersionResponse` with a `version_id`.
+
+### Trigger ingestion on the version
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/your/file.txt"
+```
+
+This uploads the file and starts the ingestion pipeline for that specific version.
+
+</Steps>
+
+---
+
+## Re-ingest / update a document
+
+When a document changes, create a new version by calling the re-ingest endpoint. Upon successful ingestion, the new version automatically becomes the active version and the previous version's index entries are deactivated.
+
+```bash
+curl -X POST https://api-staging.knowledgestack.ai/v1/documents/<document-id>/ingest \
+  -H "Authorization: Bearer <your-api-key>" \
+  -F "file=@/path/to/updated-report.pdf" \
+  -F "ingestion_mode=high_accuracy"
+```
+
+The response is identical to the original ingest call — a new `workflow_id` and `document_version_id` are returned.
+
+---
+
+## Document version actions
+
+After ingestion, you can perform lifecycle actions on a specific document version using `POST /v1/document_versions/{version_id}`.
+
+| Action | Description |
+|---|---|
+| `reembed` | Re-runs embedding on all chunks in this version. Useful after updating chunk content or changing embedding models |
+
+```bash
+curl -X POST "https://api-staging.knowledgestack.ai/v1/document_versions/<version-id>" \
+  -H "Authorization: Bearer <your-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"action": "reembed"}'
+```
+
+<Note>
+To archive or delete a version, use the `DELETE /v1/document_versions/{version_id}` endpoint.
+</Note>
